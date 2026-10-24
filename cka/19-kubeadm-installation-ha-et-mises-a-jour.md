@@ -7,7 +7,7 @@ date: 2026-10-23
 
 ## 19. kubeadm : installer, haute disponibilité, mettre à jour
 
-Ce chapitre couvre le cycle de vie complet d'un cluster construit avec kubeadm : préparer les machines, initialiser le premier control plane, joindre des nœuds, passer en haute disponibilité, mettre à jour le cluster d'une version mineure à la suivante, surveiller et renouveler les certificats, enfin défaire proprement un nœud. C'est le cœur du domaine *Cluster Architecture, Installation and Configuration* (25 %), dont quatre compétences officielles en relèvent directement : *Prepare underlying infrastructure for installing a Kubernetes cluster*, *Create and manage Kubernetes clusters using kubeadm*, *Manage the lifecycle of Kubernetes clusters* et *Implement and configure a highly-available control plane*. Il nourrit aussi *Troubleshoot clusters and nodes*, car un nœud qui ne rejoint pas ou un kubelet qui ne redémarre plus après une mise à jour sont des pannes typiques. À l'examen, la tâche la plus fréquente est la mise à jour d'un control plane, puis d'un worker, vers la mineure suivante : quelques minutes de commandes où l'ordre compte plus que la vitesse de frappe. Viennent ensuite la jonction d'un nœud dont le jeton a expiré, le renouvellement de certificats et la préparation d'une machine (paquet à installer, paramètres du noyau, runtime).
+Ce chapitre couvre le cycle de vie complet d'un cluster construit avec kubeadm : préparer les machines, initialiser le premier control plane, joindre des nœuds, passer en haute disponibilité, mettre à jour le cluster d'une version mineure à la suivante, surveiller et renouveler les certificats, enfin défaire proprement un nœud. C'est le cœur du domaine *Cluster Architecture, Installation and Configuration* (25 %), dont quatre compétences officielles relèvent directement : *Prepare underlying infrastructure for installing a Kubernetes cluster*, *Create and manage Kubernetes clusters using kubeadm*, *Manage the lifecycle of Kubernetes clusters* et *Implement and configure a highly-available control plane*. Il nourrit aussi *Troubleshoot clusters and nodes*, car un nœud qui ne rejoint pas ou un kubelet qui ne redémarre plus après une mise à jour sont des pannes typiques. À l'examen, la tâche la plus fréquente est la mise à jour d'un control plane, puis d'un worker, vers la mineure suivante : quelques minutes de commandes où l'ordre compte plus que la vitesse de frappe. Viennent ensuite la jonction d'un nœud dont le jeton a expiré, le renouvellement de certificats et la préparation d'une machine (paquet à installer, paramètres du noyau, runtime).
 
 Le cours voisin consacré à kubeadm (dossier [`../kubeadm/`](../kubeadm/00-introduction.md)) détaille chaque mécanisme sur cinq chapitres ; il vise Kubernetes 1.34 → 1.35. Ce chapitre-ci se suffit pour l'examen, vise 1.36 → 1.37, et renvoie au cours kubeadm pour l'approfondissement : préparation des nœuds ([chapitre 3](../kubeadm/03-preparation-des-noeuds.md)), `kubeadm init` et ses phases ([chapitre 4](../kubeadm/04-kubeadm-init.md)), jonction et bootstrap TLS ([chapitre 5](../kubeadm/05-join-et-bootstrap-tls.md)), haute disponibilité ([chapitre 6](../kubeadm/06-haute-disponibilite.md)).
 
@@ -272,7 +272,7 @@ kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/
 kubectl get nodes        # NotReady tant que le CNI n'a pas écrit /etc/cni/net.d, puis Ready
 ```
 
-`admin.conf` porte l'identité `kubernetes-admin`, membre du groupe `kubeadm:cluster-admins`, lié à `cluster-admin` par RBAC : ses droits sont révocables. `super-admin.conf`, écrit seulement sur le nœud de l'init, appartient à `system:masters` et contourne RBAC ; il se garde pour les urgences (chapitre 16).
+`admin.conf` porte l'identité `kubernetes-admin`, membre du groupe `kubeadm:cluster-admins`, lié à `cluster-admin` par RBAC : ses droits sont révocables. `super-admin.conf`, écrit seulement sur le nœud de l'init, appartient à `system:masters` et contourne RBAC ; il se garde pour les urgences (chapitre 16.2).
 
 #### 19.3.3 Jetons et commande de jonction
 
@@ -305,7 +305,7 @@ sudo kubeadm join k8s-api.example:6443 --token <jeton> \
   --discovery-token-ca-cert-hash sha256:<hash>
 ```
 
-Le kubelet du nœud s'authentifie avec le jeton (`system:bootstrap:<id>`), dépose une CSR que le controller-manager approuve et signe, puis bascule sur un certificat client renouvelable (`/var/lib/kubelet/pki/kubelet-client-current.pem`) : c'est le bootstrap TLS, détaillé au [chapitre 5 du cours kubeadm](../kubeadm/05-join-et-bootstrap-tls.md). Le binaire kubeadm qui fait le `join` doit être de la même version que celui qui a fait l'`init` ou la dernière mise à jour.
+Le kubelet du nœud s'authentifie avec le jeton (`system:bootstrap:<id>`), dépose une CSR que le controller-manager approuve et signe, puis bascule sur un certificat client renouvelable (`/var/lib/kubelet/pki/kubelet-client-current.pem`) : c'est le bootstrap TLS, détaillé au [chapitre 5.3 du cours kubeadm](../kubeadm/05-join-et-bootstrap-tls.md). Le binaire kubeadm qui fait le `join` doit être de la même version que celui qui a fait l'`init` ou la dernière mise à jour.
 
 #### 19.3.4 Lire la configuration d'un cluster existant
 
@@ -390,11 +390,11 @@ kubectl -n kube-system exec etcd-cp1 -- etcdctl --endpoints=https://127.0.0.1:23
 9c7d6e5f4a3b2c18, started, cp3, https://192.168.10.13:2380, https://192.168.10.13:2379, false
 ```
 
-Trois apiservers servent en même temps ; le controller-manager et le scheduler, eux, pratiquent l'**élection de leader** (un seul actif, les autres attendent le Lease) : une instance cassée qui n'est pas leader ne produit aucun symptôme, ce qui explique qu'une panne se voie mieux sur un control plane unique (chapitre 23). La dernière colonne de `member list` (`IS LEARNER`) doit valoir `false` partout une fois les joins terminés.
+Trois apiservers servent en même temps ; le controller-manager et le scheduler, eux, pratiquent l'**élection de leader** (un seul actif, les autres attendent le Lease) : une instance cassée qui n'est pas leader ne produit aucun symptôme, ce qui explique qu'une panne se voie mieux sur un control plane unique (chapitre 23.4.5). La dernière colonne de `member list` (`IS LEARNER`) doit valoir `false` partout une fois les joins terminés.
 
 ### 19.5 La politique de décalage des versions
 
-Une mise à jour fait cohabiter deux versions pendant des minutes ou des heures. La politique officielle (*Version Skew Policy*) dit lesquelles peuvent coexister ; kubeadm l'applique et refuse de sortir des clous. Sa page est publiée sous `kubernetes.io/releases/`, hors de `/docs` : elle ne fait pas partie des adresses autorisées à l'examen (chapitre 24), d'où l'intérêt de retenir le tableau ci-dessous.
+Une mise à jour fait cohabiter deux versions pendant des minutes ou des heures. La politique officielle (*Version Skew Policy*) dit lesquelles peuvent coexister ; kubeadm l'applique et refuse de sortir des clous. Sa page est publiée sous `kubernetes.io/releases/`, hors de `/docs` : elle ne fait pas partie des adresses autorisées à l'examen (chapitre 24.7), d'où l'intérêt de retenir le tableau ci-dessous.
 
 | Composant | Règle, par rapport à kube-apiserver | Versions admises face à un apiserver 1.37 |
 |---|---|---|
@@ -562,7 +562,7 @@ Reste le CNI : kubeadm n'y touche pas. Pour Flannel, on réapplique le manifeste
 
 `upgrade apply` enchaîne des phases, rejouables (`kubeadm upgrade apply phase <phase>`) : `preflight`, `control-plane`, `upload-config`, `kubeconfig`, `kubelet-config`, `bootstrap-token`, `addon` (`coredns`, `kube-proxy`) et `post-upgrade`. Quatre comportements méritent d'être connus.
 
-**Les manifestes sont remplacés un par un, avec retour arrière.** Pour etcd puis kube-apiserver, kube-controller-manager et kube-scheduler, kubeadm écrit le nouveau manifeste dans un dossier temporaire, sauvegarde l'ancien dans `/etc/kubernetes/tmp/kubeadm-backup-manifests-<date>-<heure>`, le remplace, attend que le hash du pod miroir change puis que le pod soit prêt (5 minutes au plus), et revient en arrière si le composant ne repart pas. Avant de toucher à etcd, il copie ses données dans `/etc/kubernetes/tmp/kubeadm-backup-etcd-<date>-<heure>` : c'est une copie de secours, pas une sauvegarde au sens du chapitre 20. Ces dossiers restent après la mise à jour et se nettoient à la main.
+**Les manifestes sont remplacés un par un, avec retour arrière.** Pour etcd puis kube-apiserver, kube-controller-manager et kube-scheduler, kubeadm écrit le nouveau manifeste dans un dossier temporaire, sauvegarde l'ancien dans `/etc/kubernetes/tmp/kubeadm-backup-manifests-<date>-<heure>`, le remplace, attend que le hash du pod miroir change puis que le pod soit prêt (5 minutes au plus), et revient en arrière si le composant ne repart pas. Avant de toucher à etcd, il copie ses données dans `/etc/kubernetes/tmp/kubeadm-backup-etcd-<date>-<heure>` : c'est une copie de secours, pas une sauvegarde au sens du chapitre 20.6. Ces dossiers restent après la mise à jour et se nettoient à la main.
 
 **Les certificats sont renouvelés au passage**, composant par composant (19.7.3).
 
@@ -585,7 +585,7 @@ sudo systemctl restart kubelet
 kubectl uncordon cp1
 ```
 
-Le drain est **obligatoire** pour une mise à jour de mineure du kubelet : la mise à jour en place d'un kubelet d'une mineure à l'autre n'est pas prise en charge. Les pods de DaemonSet restent (`--ignore-daemonsets`) ; un pod avec un volume `emptyDir` exige `--delete-emptydir-data`, un pod sans contrôleur `--force`, et un PodDisruptionBudget peut bloquer l'éviction (chapitre 8). `daemon-reload` relit l'unité et son drop-in, que le paquet a pu modifier. Les pods statiques du control plane, eux, ne sont pas évincés par le drain : ce sont des pods miroirs.
+Le drain est **obligatoire** pour une mise à jour de mineure du kubelet : la mise à jour en place d'un kubelet d'une mineure à l'autre n'est pas prise en charge. Les pods de DaemonSet restent (`--ignore-daemonsets`) ; un pod avec un volume `emptyDir` exige `--delete-emptydir-data`, un pod sans contrôleur `--force`, et un PodDisruptionBudget peut bloquer l'éviction (chapitre 8.14). `daemon-reload` relit l'unité et son drop-in, que le paquet a pu modifier. Les pods statiques du control plane, eux, ne sont pas évincés par le drain : ce sont des pods miroirs.
 
 > [!tip] Réflexe d'examen
 > `kubectl get nodes` affiche dans la colonne `VERSION` la version du **kubelet**, pas celle du control plane. Après `upgrade apply`, `cp1` y figure toujours en `v1.36.5` ; la version de l'API se lit dans `kubectl version` (`Server Version`), celle des composants dans les images des pods statiques. Une tâche « mets à jour cp1 en 1.37.1 » n'est terminée que lorsque la colonne affiche `v1.37.1` et que le nœud est `Ready` et schedulable.
@@ -972,7 +972,7 @@ Retire proprement `w2` du cluster : vide-le, réinitialise-le, nettoie ce que `k
 
 **Point de départ** : exercice 19.5, ou instantané S1.
 
-Prépare `cp2` et `cp3` comme en 19.4. Déploie kube-vip sur `cp1` pour l'adresse 192.168.10.10 ([chapitre 6.5 du cours kubeadm](../kubeadm/06-haute-disponibilite.md)), fais pointer `k8s-api.example` vers 192.168.10.10 sur les cinq machines, puis joins `cp2` et `cp3` comme control planes. Vérifie les trois membres etcd. Prends l'instantané **S2**.
+Prépare `cp2` et `cp3` comme à l'exercice 19.4. Déploie kube-vip sur `cp1` pour l'adresse 192.168.10.10 ([chapitre 6.5 du cours kubeadm](../kubeadm/06-haute-disponibilite.md)), fais pointer `k8s-api.example` vers 192.168.10.10 sur les cinq machines, puis joins `cp2` et `cp3` comme control planes. Vérifie les trois membres etcd. Prends l'instantané **S2**.
 
 > [!example]- Solution
 > ```bash

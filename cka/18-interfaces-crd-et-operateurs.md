@@ -76,7 +76,7 @@ Depuis la suppression de dockershim en 1.24, Docker n'est plus un runtime direct
 
 #### 18.2.2 containerd 2.x et sa configuration
 
-containerd lit `/etc/containerd/config.toml`. Sa version 2.x a introduit le format de configuration `version = 3`, dans lequel le plugin CRI est scindé et la configuration des runtimes vit sous `plugins.'io.containerd.cri.v1.runtime'`. Deux réglages y comptent pour Kubernetes : le pilote de cgroups de runc, qui doit égaler celui du kubelet (`systemd`), et la liste des runtimes, dont chaque nom est un **handler** utilisable par une RuntimeClass.
+containerd lit `/etc/containerd/config.toml`. Sa version 2.x a introduit le format de configuration `version = 3`, dans lequel le plugin CRI est scindé et la configuration des runtimes vit sous `plugins.'io.containerd.cri.v1.runtime'`. Deux réglages y comptent pour Kubernetes : le pilote de cgroups de runc (`SystemdCgroup`, à `true` pour le pilote `systemd` recommandé), que le kubelet 1.37 adopte par l'appel CRI `RuntimeConfig` au lieu de son propre champ `cgroupDriver` (19.2.5), et la liste des runtimes, dont chaque nom est un **handler** utilisable par une RuntimeClass.
 
 ```toml
 # containerd 2.x, format version 3 (« containerd config default »)

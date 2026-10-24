@@ -30,7 +30,7 @@ chapitre dans l'état de fin de chapitre, sans tenir compte des chapitres suivan
 
 Durées mesurées le 23 octobre 2026 (nœuds neufs, images retéléchargées) : I0 de 57 s
 à 3 min 51 s, I1 10 min 27 s, I2 7 min 23 s, I3 10 min 09 s, I4 14 min 23 s.
-Pour garder un état, préfère `minikube -p cka stop` puis `start` (≈ 1 min 30 s).
+Pour garder un état, préfère `minikube -p cka stop` puis `start` (≈ 2 min : arrêt 1 min 20 s à 1 min 26 s, démarrage 29 s).
 
 ## Variables
 

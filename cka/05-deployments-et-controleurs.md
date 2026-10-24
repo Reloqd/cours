@@ -7,7 +7,7 @@ date: 2026-10-23
 
 ## 5. Deployments et autres contrôleurs
 
-Un pod seul ne se répare pas : si son nœud tombe, il est perdu, et si sa spec doit changer, il faut le recréer à la main. Ce chapitre étudie les objets qui font ce travail à ta place. Chacun est piloté par un contrôleur du kube-controller-manager qui compare en boucle l'état désiré à l'état observé ([chapitre 2](02-architecture.md)) : le ReplicaSet maintient un nombre de copies, le Deployment orchestre le passage d'une version à une autre, le DaemonSet place un pod par nœud, le StatefulSet donne à chaque pod une identité stable, le Job mène une tâche à son terme et le CronJob la planifie, tandis que le PodDisruptionBudget borne ce que les opérations de maintenance peuvent retirer. Le programme officiel y consacre deux compétences, *Understand application deployments and how to perform rolling update and rollbacks* et *Understand the primitives used to create robust, self-healing, application deployments*, et l'examen les vérifie presque à coup sûr : une mise à jour progressive avec des valeurs imposées de `maxSurge` et `maxUnavailable`, un retour à une révision précise, un DaemonSet, un CronJob. On y gagne des points vite à condition de connaître l'algorithme exact du rolling update, les arrondis, et la façon dont `kubectl rollout` manipule réellement les révisions.
+Un pod seul ne se répare pas : si son nœud tombe, il est perdu, et si sa spec doit changer, il faut le recréer à la main. Ce chapitre étudie les objets qui font ce travail à ta place. Chacun est piloté par un contrôleur du kube-controller-manager qui compare en boucle l'état désiré à l'état observé ([chapitre 2.1](02-architecture.md)) : le ReplicaSet maintient un nombre de copies, le Deployment orchestre le passage d'une version à une autre, le DaemonSet place un pod par nœud, le StatefulSet donne à chaque pod une identité stable, le Job mène une tâche à son terme et le CronJob la planifie, tandis que le PodDisruptionBudget borne ce que les opérations de maintenance peuvent retirer. Le programme officiel y consacre deux compétences, *Understand application deployments and how to perform rolling update and rollbacks* et *Understand the primitives used to create robust, self-healing, application deployments*, et l'examen les vérifie presque à coup sûr : une mise à jour progressive avec des valeurs imposées de `maxSurge` et `maxUnavailable`, un retour à une révision précise, un DaemonSet, un CronJob. On y gagne des points vite à condition de connaître l'algorithme exact du rolling update, les arrondis, et la façon dont `kubectl rollout` manipule réellement les révisions.
 
 ### 5.1 Contrôleurs : déclarer un état, déléguer la réparation
 
@@ -108,7 +108,7 @@ spec:
 
 | Champ | Défaut | Rôle |
 |---|---|---|
-| `replicas` | 1 | nombre de pods voulus ; à ne pas fixer si un HPA pilote le Deployment ([chapitre 7](07-autoscaling.md)) |
+| `replicas` | 1 | nombre de pods voulus ; à ne pas fixer si un HPA pilote le Deployment ([chapitre 7.12](07-autoscaling.md)) |
 | `selector` | **obligatoire** en `apps/v1` | doit correspondre aux labels du modèle ; **immuable** après la création |
 | `strategy.type` | `RollingUpdate` | ou `Recreate` |
 | `strategy.rollingUpdate.maxSurge` | `25%` | pods en plus du nombre voulu pendant la mise à jour (arrondi **au-dessus**) |
@@ -192,7 +192,7 @@ kubectl -n boutique edit deployment front
 kubectl -n boutique rollout restart deployment/front
 ```
 
-`kubectl set image` prend le **nom du conteneur** (`nginx`), pas celui de l'image ; `*` vise tous les conteneurs. `kubectl rollout restart` ne change rien d'utile : il pose l'annotation `kubectl.kubernetes.io/restartedAt` dans le modèle, ce qui suffit à créer une révision et à remplacer tous les pods. C'est la façon propre de relire une ConfigMap consommée en variables d'environnement ([chapitre 6](06-configmaps-et-secrets.md)).
+`kubectl set image` prend le **nom du conteneur** (`nginx`), pas celui de l'image ; `*` vise tous les conteneurs. `kubectl rollout restart` ne change rien d'utile : il pose l'annotation `kubectl.kubernetes.io/restartedAt` dans le modèle, ce qui suffit à créer une révision et à remplacer tous les pods. C'est la façon propre de relire une ConfigMap consommée en variables d'environnement ([chapitre 6.4](06-configmaps-et-secrets.md)).
 
 `kubectl rollout status` suit la progression et rend la main à la fin. Ses messages décrivent l'état exact :
 
@@ -281,7 +281,7 @@ Le placement passe par le scheduler, mais de façon contrainte : le contrôleur 
 | `node.kubernetes.io/unschedulable` | `NoSchedule` : placement possible sur un nœud cordonné |
 | `node.kubernetes.io/network-unavailable` | `NoSchedule`, seulement pour un pod en `hostNetwork` |
 
-La taint `node-role.kubernetes.io/control-plane:NoSchedule` n'est **pas** dans cette liste : sur un cluster kubeadm, un DaemonSet ne tourne pas sur les control planes, sauf toleration explicite (le [chapitre 8](08-ordonnancement-et-admission.md) l'ajoute à `agent-noeud`).
+La taint `node-role.kubernetes.io/control-plane:NoSchedule` n'est **pas** dans cette liste : sur un cluster kubeadm, un DaemonSet ne tourne pas sur les control planes, sauf toleration explicite (l'[exercice 8.5](08-ordonnancement-et-admission.md) l'ajoute à `agent-noeud`).
 
 > [!info] minikube ≠ examen
 > Le control plane `cka` du lab ne porte aucune taint : `agent-noeud` y tourne comme sur les workers, et le DaemonSet annonce 3 pods. Sur un cluster kubeadm d'examen à un control plane et deux workers, le même DaemonSet en annonce 2.
@@ -293,7 +293,7 @@ Les mises à jour suivent `spec.updateStrategy`. `RollingUpdate` (défaut) rempl
 
 ### 5.7 StatefulSet : l'identité stable
 
-Un StatefulSet gère des pods qui ne sont **pas** interchangeables. Chacun reçoit un ordinal et un nom fixe, `<statefulset>-0`, `<statefulset>-1`…, qu'il garde quand il est recréé, sur n'importe quel nœud. Chacun reçoit aussi un nom DNS stable, `<pod>.<service>.<namespace>.svc.cluster.local`, à condition qu'un **Service headless** (sans adresse de cluster, [chapitre 10](10-services.md)) existe et que le StatefulSet le désigne dans `serviceName` ; c'est à toi de créer ce Service. Enfin, chaque pod reçoit ses propres volumes, créés à partir de `volumeClaimTemplates`, qui le suivent d'une recréation à l'autre : c'est l'objet du [chapitre 15](15-stockage.md), où le StatefulSet `redis` du fil rouge les met en pratique.
+Un StatefulSet gère des pods qui ne sont **pas** interchangeables. Chacun reçoit un ordinal et un nom fixe, `<statefulset>-0`, `<statefulset>-1`…, qu'il garde quand il est recréé, sur n'importe quel nœud. Chacun reçoit aussi un nom DNS stable, `<pod>.<service>.<namespace>.svc.cluster.local`, à condition qu'un **Service headless** (sans adresse de cluster, [chapitre 10.9](10-services.md)) existe et que le StatefulSet le désigne dans `serviceName` ; c'est à toi de créer ce Service. Enfin, chaque pod reçoit ses propres volumes, créés à partir de `volumeClaimTemplates`, qui le suivent d'une recréation à l'autre : c'est l'objet du [chapitre 15.11](15-stockage.md), où le StatefulSet `redis` du fil rouge les met en pratique.
 
 | Aspect | Comportement |
 |---|---|
@@ -473,7 +473,7 @@ NAME    MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
 front   2               N/A               1                     8s
 ```
 
-Le vidage de nœud, son interaction avec ce PDB et les messages de `kubectl drain` sont traités au [chapitre 8](08-ordonnancement-et-admission.md).
+Le vidage de nœud, son interaction avec ce PDB et les messages de `kubectl drain` sont traités au [chapitre 8.14](08-ordonnancement-et-admission.md).
 
 ### 5.11 Synthèse : les primitives d'auto-réparation
 
@@ -1010,7 +1010,7 @@ Crée dans `boutique` un PodDisruptionBudget `front` qui garde au moins 2 pods `
 > kubectl -n boutique get pdb front -o jsonpath='{.status}{"\n"}'
 > ```
 >
-> Avec 3 pods sains et un minimum de 2, une seule éviction est permise à la fois. Le rolling update d'un Deployment n'utilise pas l'API d'éviction : il supprime les pods selon ses propres bornes (`maxUnavailable: 0` pour `front`), et le PDB ne le concerne pas. Le budget joue pour `kubectl drain`, au [chapitre 8](08-ordonnancement-et-admission.md).
+> Avec 3 pods sains et un minimum de 2, une seule éviction est permise à la fois. Le rolling update d'un Deployment n'utilise pas l'API d'éviction : il supprime les pods selon ses propres bornes (`maxUnavailable: 0` pour `front`), et le PDB ne le concerne pas. Le budget joue pour `kubectl drain`, au [chapitre 8.14](08-ordonnancement-et-admission.md).
 >
 > **Vérification** :
 >

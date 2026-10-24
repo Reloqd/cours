@@ -63,7 +63,7 @@ Ce glossaire définit les termes du cours en une ou deux phrases, au sens exact 
 
 **cert-manager** — Opérateur qui émet et renouvelle des certificats X.509 décrits par des ressources `Certificate`, signés par un `Issuer` ou un `ClusterIssuer`, et rangés dans des Secrets de type `kubernetes.io/tls`. Version du cours : v1.21.2. → [chapitre 18](18-interfaces-crd-et-operateurs.md)
 
-**cgroup** — Mécanisme du noyau Linux qui borne et compte les ressources d'un groupe de processus. Le kubelet y applique requests et limits ; depuis 1.35 il refuse par défaut de démarrer sur cgroup v1 (`failCgroupV1: true`), et le pilote de cgroup attendu est `systemd`. → chapitres [4](04-pods.md) et [19](19-kubeadm-installation-ha-et-mises-a-jour.md)
+**cgroup** — Mécanisme du noyau Linux qui borne et compte les ressources d'un groupe de processus. Le kubelet y applique requests et limits ; depuis 1.35 il refuse par défaut de démarrer sur cgroup v1 (`failCgroupV1: true`), et le pilote de cgroups (`systemd` recommandé) se règle dans le runtime, que le kubelet interroge depuis 1.34 (`cgroupDriver` n'est plus qu'un repli). → chapitres [4](04-pods.md) et [19](19-kubeadm-installation-ha-et-mises-a-jour.md)
 
 **ClusterIP** — Type de Service par défaut : une adresse virtuelle stable, prise dans la plage des Services, joignable seulement depuis le cluster. → [chapitre 10](10-services.md)
 
@@ -103,7 +103,7 @@ Ce glossaire définit les termes du cours en une ou deux phrases, au sens exact 
 
 **CRI** (*Container Runtime Interface*) — API gRPC entre le kubelet et le runtime de conteneurs : sandboxes, conteneurs, images. → [chapitre 18](18-interfaces-crd-et-operateurs.md)
 
-**crictl** — Client en ligne de commande du CRI, lancé sur un nœud (avec `sudo`) pour lister sandboxes, conteneurs et images et lire les journaux, même quand l'API est injoignable. → chapitres [18](18-interfaces-crd-et-operateurs.md) et [23](23-depanner-le-cluster.md)
+**crictl** — Client en ligne de commande du CRI, lancé sur un nœud (avec `sudo`) pour lister sandboxes, conteneurs et images et lire les journaux, même quand l'API est injoignable. → chapitres [2](02-architecture.md), [18](18-interfaces-crd-et-operateurs.md) et [23](23-depanner-le-cluster.md)
 
 **CronJob** — Contrôleur qui crée des Jobs selon une planification cron, avec fuseau horaire facultatif (`timeZone`), politique de concurrence (`Allow`, `Forbid`, `Replace`) et historiques bornés. → [chapitre 5](05-deployments-et-controleurs.md)
 
@@ -179,7 +179,7 @@ Ce glossaire définit les termes du cours en une ou deux phrases, au sens exact 
 
 ### H
 
-**Headless** (Service) — Service sans ClusterIP (`clusterIP: None`) : le DNS rend directement les adresses des pods prêts ; un pod qui déclare `hostname` et `subdomain`, comme ceux d'un StatefulSet, y reçoit son propre nom. → chapitres [10](10-services.md) et [15](15-stockage.md)
+**Headless** (Service) — Service sans ClusterIP (`clusterIP: None`) : le DNS rend directement les adresses des pods prêts ; un pod qui déclare `hostname` et `subdomain`, comme ceux d'un StatefulSet, y reçoit son propre nom. → chapitres [10](10-services.md), [11](11-coredns.md) et [15](15-stockage.md)
 
 **Helm** — Gestionnaire de paquets qui rend des charts (gabarits et valeurs) et suit chaque installation comme une release révisionnée. Version 4 depuis novembre 2025 ; 4.3 dans le cours. → [chapitre 17](17-helm-et-kustomize.md)
 
@@ -203,7 +203,7 @@ Ce glossaire définit les termes du cours en une ou deux phrases, au sens exact 
 
 **Ingress** — Objet `networking.k8s.io/v1` de routage HTTP et HTTPS par nom d'hôte et chemin vers des Services, appliqué par un contrôleur d'Ingress. L'API reste GA. → [chapitre 12](12-ingress.md)
 
-**ingress2gateway** — Outil officiel de conversion d'Ingress en ressources Gateway API (version 1.0 en mars 2026). → [chapitre 13](13-gateway-api.md)
+**ingress2gateway** — Outil officiel de conversion d'Ingress en ressources Gateway API (version 1.0 en mars 2026, v1.2.0 dans le cours). → [chapitre 13](13-gateway-api.md)
 
 **IngressClass** — Objet qui rattache des Ingress à un contrôleur (`spec.controller`) ; l'annotation `ingressclass.kubernetes.io/is-default-class: "true"` en fait la classe par défaut. → [chapitre 12](12-ingress.md)
 
@@ -253,9 +253,9 @@ Ce glossaire définit les termes du cours en une ou deux phrases, au sens exact 
 
 **Label** — Paire clé-valeur attachée à un objet, sur laquelle portent les sélecteurs : Services, contrôleurs, NetworkPolicies, affinités. → [chapitre 2](02-architecture.md)
 
-**Leader election** (élection de leader) — Mécanisme, fondé sur un Lease, qui garantit qu'une seule instance de kube-scheduler et de kube-controller-manager agit à la fois dans un control plane hautement disponible. Désactivé dans le lab minikube. → [chapitre 19](19-kubeadm-installation-ha-et-mises-a-jour.md)
+**Leader election** (élection de leader) — Mécanisme, fondé sur un Lease, qui garantit qu'une seule instance de kube-scheduler et de kube-controller-manager agit à la fois dans un control plane hautement disponible. Désactivé dans le lab minikube. → chapitres [2](02-architecture.md) et [19](19-kubeadm-installation-ha-et-mises-a-jour.md)
 
-**Lease** — Objet `coordination.k8s.io/v1`. Chaque kubelet renouvelle le sien dans le namespace `kube-node-lease` pour signaler qu'il est vivant ; les élections de leader en utilisent aussi. → [chapitre 23](23-depanner-le-cluster.md)
+**Lease** — Objet `coordination.k8s.io/v1`. Chaque kubelet renouvelle le sien dans le namespace `kube-node-lease` pour signaler qu'il est vivant ; les élections de leader en utilisent aussi. → chapitres [2](02-architecture.md) et [23](23-depanner-le-cluster.md)
 
 **LimitRange** — Objet de namespace qui impose des bornes de ressources par conteneur, pod ou PVC et injecte des requests et limits par défaut aux conteneurs qui n'en déclarent pas. → [chapitre 8](08-ordonnancement-et-admission.md)
 

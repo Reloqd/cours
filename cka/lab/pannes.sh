@@ -65,6 +65,10 @@ sauvegarder() {  # sauvegarder <nœud> <fichier>
 }
 cle_redis_ok() { [ "$(k -n boutique exec redis-0 -- redis-cli GET commandes 2>/dev/null | tr -d "\r")" = "42" ]; }
 noeud_pret() { [ "$(k get node "$1" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ]; }
+sans_taint_unreachable() {
+  local t; t=$(k get node "$1" -o jsonpath='{.spec.taints[*].key}') || return 1
+  case "$t" in *unreachable*) return 1 ;; esac
+}
 
 # --- Pannes du chapitre 22 -----------------------------------------------------
 casser_01() { k -n boutique set image deployment/front nginx=nginx:1.30.6-alpnie; }
@@ -230,9 +234,9 @@ verifier_13() {
   controle "kubelet de $NOEUD_3 activé au démarrage" \
     sh -c "minikube -p '$PROFIL' ssh -n '$NOEUD_3' -- systemctl is-enabled kubelet | grep -q '^enabled'"
   controle "kubelet de $NOEUD_3 actif" ssh_noeud "$NOEUD_3" 'systemctl is-active --quiet kubelet'
-  controle "$NOEUD_3 Ready" noeud_pret "$NOEUD_3"
-  controle "plus de taint unreachable sur $NOEUD_3" \
-    sh -c "! kubectl --context '$CTX' get node '$NOEUD_3' -o jsonpath='{.spec.taints[*].key}' | grep -q unreachable"
+  # Le contrôleur des nœuds retire la taint unreachable à son passage suivant (toutes les 5 s).
+  controle "$NOEUD_3 Ready" attendre 30 "$NOEUD_3 Ready" noeud_pret "$NOEUD_3"
+  controle "plus de taint unreachable sur $NOEUD_3" attendre 30 "taint unreachable" sans_taint_unreachable "$NOEUD_3"
 }
 
 casser_14() {
@@ -243,7 +247,7 @@ verifier_14() {
   controle "clientCAFile du kubelet de $NOEUD_2 = /var/lib/minikube/certs/ca.crt" \
     ssh_noeud "$NOEUD_2" "sudo grep -q 'clientCAFile: /var/lib/minikube/certs/ca.crt\$' /var/lib/kubelet/config.yaml"
   controle "kubelet de $NOEUD_2 actif" ssh_noeud "$NOEUD_2" 'systemctl is-active --quiet kubelet'
-  controle "$NOEUD_2 Ready" noeud_pret "$NOEUD_2"
+  controle "$NOEUD_2 Ready" attendre 30 "$NOEUD_2 Ready" noeud_pret "$NOEUD_2"
 }
 
 casser_15() {

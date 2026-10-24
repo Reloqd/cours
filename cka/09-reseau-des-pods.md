@@ -51,7 +51,7 @@ LES TROIS PLANS D'ADRESSAGE DU LAB
                seules les règles de kube-proxy les connaissent (chapitre 10)
 ```
 
-La distinction entre les deux premiers plans et le troisième est fondamentale : on peut faire un `ping` vers un pod, pas vers une adresse de Service. Le chapitre 10 explique pourquoi.
+La distinction entre les deux premiers plans et le troisième est fondamentale : on peut faire un `ping` vers un pod, pas vers une adresse de Service. Le chapitre 10.1 explique pourquoi.
 
 > [!info] minikube ≠ examen
 > Dans le lab, Calico v3.32.2 est installé par minikube sous forme de manifeste dans `kube-system`, en IPIP, avec des pods en `10.244.0.0/16`. Sur un cluster d'examen, le CNI est celui que l'énoncé a installé (souvent Calico, parfois Flannel ou Cilium) et les plages sont celles de son `kubeadm init`. Ne présume jamais d'un CNI : `kubectl -n kube-system get pods -o wide` et `ls /etc/cni/net.d` sur un nœud te le disent en dix secondes.
@@ -366,7 +366,7 @@ kubectl -n boutique exec outils -- ip neigh
 169.254.1.1 dev eth0 lladdr ee:ee:ee:ee:ee:ee REACHABLE
 ```
 
-La seconde entrée est l'adresse du tunnel du nœud (9.4) : quand le nœud écrit lui-même à un pod local (sonde du kubelet, `ping` lancé depuis le nœud), il prend cette adresse pour source (`ip route get 10.244.195.196` sur le nœud affiche `src 10.244.195.192`), et le pod lui répond par la même MAC. L'état (`REACHABLE`, `DELAY`, `STALE`) ne dit que l'âge de la dernière confirmation.
+La première entrée est l'adresse du tunnel du nœud (9.4) : quand le nœud écrit lui-même à un pod local (sonde du kubelet, `ping` lancé depuis le nœud), il prend cette adresse pour source (`ip route get 10.244.195.196` sur le nœud affiche `src 10.244.195.192`), et le pod lui répond par la même MAC. L'état (`REACHABLE`, `DELAY`, `STALE`) ne dit que l'âge de la dernière confirmation.
 
 #### Sur le nœud : un /32 par pod, un /26 par nœud voisin
 
@@ -473,9 +473,9 @@ spec:
 
 Ce n'est ni le kubelet ni kube-proxy qui réalise cette redirection, mais le **plugin CNI** `portmap`, à condition que la chaîne de configuration l'annonce (`"capabilities": {"portMappings": true}`) : le runtime lui passe alors la liste des ports du pod, et `portmap` pose des règles de DNAT dans des chaînes `CNI-HOSTPORT-DNAT` et `CNI-DN-…` de la table `nat`. Le port n'est ouvert que sur le nœud qui héberge le pod, et l'option `hostIP` permet de le limiter à une seule adresse de ce nœud. Le scheduler vérifie la disponibilité : un second pod qui demande le même `hostPort` et le même protocole sur un nœud déjà pris y est refusé avec la raison `node(s) didn't have free ports for the requested pod ports`. `hostPort` est lui aussi interdit par le niveau `baseline`.
 
-Le contrôleur d'Ingress de l'addon minikube, au chapitre 12, publie ainsi les ports 80 et 443 du nœud `cka`. Voici comment choisir entre les trois mécanismes qui exposent un pod sur l'adresse d'un nœud :
+Le contrôleur d'Ingress de l'addon minikube, au chapitre 12.11, publie ainsi les ports 80 et 443 du nœud `cka`. Voici comment choisir entre les trois mécanismes qui exposent un pod sur l'adresse d'un nœud :
 
-| | `hostNetwork: true` | `hostPort` | Service `NodePort` (chapitre 10) |
+| | `hostNetwork: true` | `hostPort` | Service `NodePort` (chapitre 10.7) |
 |---|---|---|---|
 | Netns du pod | celui du nœud | propre au pod | propre au pod |
 | Qui réalise l'exposition | personne : le processus écoute directement | plugin CNI `portmap` (DNAT) | kube-proxy (DNAT) |
@@ -502,7 +502,7 @@ Face à « le pod A ne joint pas le pod B », procède couche par couche, du plu
 | Le nœud est-il `Ready` ? | `kubectl get nodes` | `cni plugin not initialized` : configuration absente de `/etc/cni/net.d` |
 | La route vers le bloc distant existe-t-elle ? | `ip route` sur le nœud source | BGP ou tunnel en échec : journaux de `calico-node` |
 | Le paquet sort-il encapsulé, arrive-t-il ? | `tcpdump -ni eth0 ip proto 4` dans un pod de débogage du nœud | réseau entre nœuds filtré (protocole 4, ou UDP 4789 en VXLAN) |
-| Une NetworkPolicy filtre-t-elle ? | `kubectl get networkpolicy -A` | chapitre 14 |
+| Une NetworkPolicy filtre-t-elle ? | `kubectl get networkpolicy -A` | chapitre 14.12 |
 | Les petits paquets passent, pas les gros ? | `ping -M do -s 1452` | MTU incohérent |
 
 Pour la commande `tcpdump`, le plus simple est un pod de débogage de nœud : `kubectl debug node/<nœud>` crée un pod dans le netns du nœud, et le profil `netadmin` lui accorde `NET_ADMIN` et `NET_RAW`. Ce pod partage les espaces de noms du nœud : crée-le dans `default`, jamais dans `boutique`, où `baseline` le refuserait.

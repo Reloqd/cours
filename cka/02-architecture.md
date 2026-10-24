@@ -64,20 +64,20 @@ Les quatre premiers forment le **control plane** ; les trois suivants tournent s
 
 #### 2.2.1 kube-apiserver
 
-L'apiserver est un serveur REST sans état : il authentifie chaque requête, l'autorise, la fait passer par l'admission, valide l'objet, l'écrit dans etcd et notifie les abonnés. Il ne prend aucune décision métier : il ne planifie rien, ne crée aucun pod de lui-même. Parce qu'il est sans état, on peut en faire tourner plusieurs côte à côte derrière un répartiteur de charge, tous actifs ([chapitre 19](19-kubeadm-installation-ha-et-mises-a-jour.md)). Il garde en mémoire un **cache de watch** par type de ressource, alimenté par etcd, qui sert la plupart des lectures et toutes les notifications : c'est lui qui permet à des milliers de clients de suivre les changements sans écraser etcd (2.10).
+L'apiserver est un serveur REST sans état : il authentifie chaque requête, l'autorise, la fait passer par l'admission, valide l'objet, l'écrit dans etcd et notifie les abonnés. Il ne prend aucune décision métier : il ne planifie rien, ne crée aucun pod de lui-même. Parce qu'il est sans état, on peut en faire tourner plusieurs côte à côte derrière un répartiteur de charge, tous actifs ([chapitre 19.4](19-kubeadm-installation-ha-et-mises-a-jour.md)). Il garde en mémoire un **cache de watch** par type de ressource, alimenté par etcd, qui sert la plupart des lectures et toutes les notifications : c'est lui qui permet à des milliers de clients de suivre les changements sans écraser etcd (2.10.4).
 
-L'apiserver est aussi un proxy. `kubectl logs`, `exec` et `port-forward` passent par lui jusqu'au kubelet du nœud (port 10250) ; les API étendues, comme `metrics.k8s.io` de metrics-server, sont relayées par sa couche d'agrégation (chapitres 7 et 18).
+L'apiserver est aussi un proxy. `kubectl logs`, `exec` et `port-forward` passent par lui jusqu'au kubelet du nœud (port 10250) ; les API étendues, comme `metrics.k8s.io` de metrics-server, sont relayées par sa couche d'agrégation (chapitres 7.3 et 18.4.4).
 
 #### 2.2.2 etcd
 
-etcd est une base clé-valeur répliquée par l'algorithme Raft ([chapitre 20](20-etcd-sauvegarde-et-restauration.md)). Kubernetes y range chaque objet sous une clé de la forme `/registry/<ressource>/<namespace>/<nom>`, par exemple `/registry/configmaps/default/kube-root-ca.crt`, sérialisé en Protobuf. Chaque écriture incrémente un compteur global, la **révision** d'etcd ; c'est elle que l'API expose sous le nom de `resourceVersion`. etcd conserve l'historique des révisions jusqu'à ce que l'apiserver lui demande de le compacter, toutes les 5 minutes par défaut (`--etcd-compaction-interval`). Sur un cluster kubeadm comme sur le lab, etcd tourne en pod statique sur le control plane et n'écoute ses clients qu'en TLS mutuel : seuls l'apiserver et un administrateur muni des certificats `etcd/` peuvent lui parler.
+etcd est une base clé-valeur répliquée par l'algorithme Raft ([chapitre 20.2](20-etcd-sauvegarde-et-restauration.md)). Kubernetes y range chaque objet sous une clé de la forme `/registry/<ressource>/<namespace>/<nom>`, par exemple `/registry/configmaps/default/kube-root-ca.crt`, sérialisé en Protobuf. Chaque écriture incrémente un compteur global, la **révision** d'etcd ; c'est elle que l'API expose sous le nom de `resourceVersion`. etcd conserve l'historique des révisions jusqu'à ce que l'apiserver lui demande de le compacter, toutes les 5 minutes par défaut (`--etcd-compaction-interval`). Sur un cluster kubeadm comme sur le lab, etcd tourne en pod statique sur le control plane et n'écoute ses clients qu'en TLS mutuel : seuls l'apiserver et un administrateur muni des certificats `etcd/` peuvent lui parler.
 
 > [!info] minikube ≠ examen
-> Données etcd dans `/var/lib/minikube/etcd` (kubeadm : `/var/lib/etcd`), certificats dans `/var/lib/minikube/certs/etcd` (kubeadm : `/etc/kubernetes/pki/etcd`). `etcdctl` et `etcdutl` sont absents du nœud `cka` ; ils existent dans l'image `registry.k8s.io/etcd:3.7.0-0`, qui n'a pas de shell. Le chapitre 20 les installe.
+> Données etcd dans `/var/lib/minikube/etcd` (kubeadm : `/var/lib/etcd` ; dans le lab, `/var/lib/minikube/etcd-restore` après la restauration de l'exercice 20.5, et `lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`), certificats dans `/var/lib/minikube/certs/etcd` (kubeadm : `/etc/kubernetes/pki/etcd`). `etcdctl` et `etcdutl` sont absents du nœud `cka` ; ils existent dans l'image `registry.k8s.io/etcd:3.7.0-0`, qui n'a pas de shell. Le chapitre 20.3.3 les installe.
 
 #### 2.2.3 kube-scheduler
 
-Le scheduler surveille les pods dont `spec.nodeName` est vide et dont `spec.schedulerName` vaut `default-scheduler`. Pour chacun, il filtre les nœuds possibles (ressources, taints, affinités, volumes), note les survivants, puis publie sa décision en créant une sous-ressource **binding** du pod : c'est l'apiserver qui remplit alors `spec.nodeName`. Le scheduler ne lance rien et ne contacte aucun nœud. Quand il est absent, rien ne le remplace : les nouveaux pods restent `Pending` **sans aucun événement**, puisque l'événement `FailedScheduling` est écrit par le scheduler lui-même. Le [chapitre 8](08-ordonnancement-et-admission.md) détaille l'algorithme ; le [chapitre 23](23-depanner-le-cluster.md) exploite ce symptôme.
+Le scheduler surveille les pods dont `spec.nodeName` est vide et dont `spec.schedulerName` vaut `default-scheduler`. Pour chacun, il filtre les nœuds possibles (ressources, taints, affinités, volumes), note les survivants, puis publie sa décision en créant une sous-ressource **binding** du pod : c'est l'apiserver qui remplit alors `spec.nodeName`. Le scheduler ne lance rien et ne contacte aucun nœud. Quand il est absent, rien ne le remplace : les nouveaux pods restent `Pending` **sans aucun événement**, puisque l'événement `FailedScheduling` est écrit par le scheduler lui-même. Le [chapitre 8.2](08-ordonnancement-et-admission.md) détaille l'algorithme ; le [chapitre 23.4.5](23-depanner-le-cluster.md) exploite ce symptôme.
 
 #### 2.2.4 kube-controller-manager
 
@@ -87,7 +87,7 @@ Quand le controller-manager tombe, les pods existants continuent de tourner, mai
 
 #### 2.2.5 cloud-controller-manager
 
-Sur un cloud, un cinquième composant, le cloud-controller-manager (port 10258), regroupe les contrôleurs qui parlent à l'API du fournisseur : adresses des nœuds, routes, Services `LoadBalancer`. kubeadm ne l'installe pas et le lab n'en a pas : c'est MetalLB qui jouera ce rôle pour les Services `LoadBalancer` au [chapitre 10](10-services.md).
+Sur un cloud, un cinquième composant, le cloud-controller-manager (port 10258), regroupe les contrôleurs qui parlent à l'API du fournisseur : adresses des nœuds, routes, Services `LoadBalancer`. kubeadm ne l'installe pas et le lab n'en a pas : c'est MetalLB qui jouera ce rôle pour les Services `LoadBalancer` au [chapitre 10.8](10-services.md).
 
 ### 2.3 Les composants des nœuds
 
@@ -99,7 +99,7 @@ Le kubelet expose une API HTTPS sur le port 10250 : c'est par elle que l'apiserv
 
 #### 2.3.2 Le runtime : containerd et CRI
 
-Le kubelet ne sait pas créer un conteneur. Il parle au runtime par **CRI** (Container Runtime Interface), une API gRPC servie sur un socket Unix, `unix:///run/containerd/containerd.sock` sur le lab (`containerRuntimeEndpoint` dans la configuration du kubelet). containerd 2.3.4 y répond, et délègue la création effective des processus à **runc** 1.4.3, qui pose namespaces Linux et cgroups. Chaque pod commence par un **sandbox** : un conteneur minuscule, l'image `registry.k8s.io/pause:3.10.2`, qui détient les namespaces réseau et IPC partagés par tous les conteneurs du pod. Kubernetes 1.37 exige containerd 2.x : la version 1.7 n'est plus prise en charge depuis 1.36. Le [chapitre 18](18-interfaces-crd-et-operateurs.md) revient sur CRI et `RuntimeClass`.
+Le kubelet ne sait pas créer un conteneur. Il parle au runtime par **CRI** (Container Runtime Interface), une API gRPC servie sur un socket Unix, `unix:///run/containerd/containerd.sock` sur le lab (`containerRuntimeEndpoint` dans la configuration du kubelet). containerd 2.3.4 y répond, et délègue la création effective des processus à **runc** 1.4.3, qui pose namespaces Linux et cgroups. Chaque pod commence par un **sandbox** : un conteneur minuscule, l'image `registry.k8s.io/pause:3.10.2`, qui détient les namespaces réseau et IPC partagés par tous les conteneurs du pod. Kubernetes 1.37 exige containerd 2.x : la version 1.7 n'est plus prise en charge depuis 1.36. Le [chapitre 18.2](18-interfaces-crd-et-operateurs.md) revient sur CRI et `RuntimeClass`.
 
 #### 2.3.3 kube-proxy
 
@@ -114,7 +114,7 @@ Le kubelet ne configure pas non plus le réseau : à la création du sandbox, le
 
 ### 2.4 Les ports de chaque composant
 
-Le tableau suivant donne les ports par défaut et leur adresse d'écoute sur un control plane kubeadm, puis ce qui change sur le lab. Il sert deux fois : pour ouvrir un pare-feu à l'installation (chapitre 19) et pour interroger un composant pendant un dépannage.
+Le tableau suivant donne les ports par défaut et leur adresse d'écoute sur un control plane kubeadm, puis ce qui change sur le lab. Il sert deux fois : pour ouvrir un pare-feu à l'installation (chapitre 19.2.1) et pour interroger un composant pendant un dépannage.
 
 | Composant | Port | Écoute sous kubeadm | Sur le lab | Usage |
 |---|---|---|---|---|
@@ -130,7 +130,7 @@ Le tableau suivant donne les ports par défaut et leur adresse d'écoute sur un 
 | kubelet (lecture seule) | 10255/TCP | désactivé (`readOnlyPort: 0`) | désactivé | — |
 | kube-proxy (santé) | 10256/TCP | toutes les adresses | idem | `/healthz`, utilisé par les répartiteurs |
 | kube-proxy (métriques) | 10249/TCP | 127.0.0.1 | 0.0.0.0 (ConfigMap) | `/metrics` |
-| NodePort | 30000-32767 TCP/UDP | tous les nœuds | idem | Services `NodePort` (chapitre 10) |
+| NodePort | 30000-32767 TCP/UDP | tous les nœuds | idem | Services `NodePort` (chapitre 10.7) |
 
 Trois détails reviennent en dépannage. Le scheduler et le controller-manager n'écoutent que sur `127.0.0.1` (kubeadm leur passe `--bind-address=127.0.0.1`) : on les interroge depuis le nœud, pas depuis le poste. Leurs chemins `/healthz`, `/readyz` et `/livez` sont dispensés d'autorisation (`--authorization-always-allow-paths`, valeur par défaut) : un simple `curl -k` y répond `ok`. Et les sondes de kubeadm visent ces mêmes chemins : `/livez` et `/readyz` sur le port sécurisé de l'apiserver et du scheduler, `/healthz` sur 10257 pour le controller-manager, `/livez` et `/readyz` sur 2381 en HTTP pour etcd. Un composant que son manifeste fait écouter ailleurs que là où sa sonde le cherche est tué en boucle par le kubelet.
 
@@ -175,7 +175,7 @@ Dès que l'apiserver est joignable, le kubelet publie pour chaque pod statique u
 
 **Les sauvegardes vont hors du dossier.** Une copie `kube-scheduler.yaml.bak` laissée dans `manifests/` décrit un second pod de même nom : le comportement est alors indéfini, et la vieille copie peut prendre le dessus. Le lab l'a vérifié : le kubelet a recréé le pod statique et journalisé `Deleted mirror pod as it didn't match the static Pod`. Range tes copies dans `/root/` ou dans un dossier de sauvegarde.
 
-**Un pod statique ne peut pas référencer d'objet de l'API.** Pas de ServiceAccount, de ConfigMap ni de Secret dans sa spec : il doit pouvoir démarrer quand l'API n'existe pas encore. Depuis 1.37 (suppression de la feature gate `PreventStaticPodAPIReferences`), cette règle ne se désactive plus. Les pods statiques ne prennent pas non plus en charge les conteneurs éphémères de `kubectl debug` ([chapitre 22](22-depanner-les-applications.md)).
+**Un pod statique ne peut pas référencer d'objet de l'API.** Pas de ServiceAccount, de ConfigMap ni de Secret dans sa spec : il doit pouvoir démarrer quand l'API n'existe pas encore. Depuis 1.37 (suppression de la feature gate `PreventStaticPodAPIReferences`), cette règle ne se désactive plus. Les pods statiques ne prennent pas non plus en charge les conteneurs éphémères de `kubectl debug` ([chapitre 22.5.1](22-depanner-les-applications.md)).
 
 **Le namespace doit exister pour le reflet.** Si le manifeste vise un namespace absent, le kubelet lance le pod mais l'apiserver refuse le mirror pod : le pod tourne, invisible pour `kubectl`.
 
@@ -222,7 +222,7 @@ rotateCertificates: true
 staticPodPath: /etc/kubernetes/manifests
 ```
 
-Le même fichier, avec le même `staticPodPath`, existe sur `cka-m02` et `cka-m03` : un worker surveille son dossier de manifestes, simplement vide. `cgroupDriver: systemd` n'est plus qu'une valeur de repli : depuis 1.34 (porte `KubeletCgroupDriverFromCRI`, stable et verrouillée), le kubelet demande le pilote de cgroups au runtime par l'appel CRI `RuntimeConfig` et **ignore** ce champ quand le runtime sait répondre, ce que fait containerd 2.x. Le journal du kubelet du lab le dit au démarrage : `"Using cgroup driver setting received from the CRI runtime" cgroupDriver="systemd"`. Le pilote se règle donc du côté de containerd (`SystemdCgroup = true`, [chapitre 19](19-kubeadm-installation-ha-et-mises-a-jour.md)), et le désaccord entre kubelet et runtime, cause classique de pannes autrefois, ne peut plus se produire ; seul un runtime qui ignore `RuntimeConfig` (containerd 1.x) fait encore lire ce champ, repli que Kubernetes 1.38 supprimera. `clusterDNS` est l'adresse que le kubelet écrit dans le `/etc/resolv.conf` de chaque pod. La configuration effective, après fusion des options, se lit aussi depuis l'API, sans entrer dans le nœud :
+Le même fichier, avec le même `staticPodPath`, existe sur `cka-m02` et `cka-m03` : un worker surveille son dossier de manifestes, simplement vide. `cgroupDriver: systemd` n'est plus qu'une valeur de repli : depuis 1.34 (porte `KubeletCgroupDriverFromCRI`, stable et verrouillée), le kubelet demande le pilote de cgroups au runtime par l'appel CRI `RuntimeConfig` et **ignore** ce champ quand le runtime sait répondre, ce que fait containerd 2.x. Le journal du kubelet du lab le dit au démarrage : `"Using cgroup driver setting received from the CRI runtime" cgroupDriver="systemd"`. Le pilote se règle donc du côté de containerd (`SystemdCgroup = true`, [chapitre 19.2.5](19-kubeadm-installation-ha-et-mises-a-jour.md)), et le désaccord entre kubelet et runtime, cause classique de pannes autrefois, ne peut plus se produire ; seul un runtime qui ignore `RuntimeConfig` (containerd 1.x) fait encore lire ce champ, repli que Kubernetes 1.38 supprimera. `clusterDNS` est l'adresse que le kubelet écrit dans le `/etc/resolv.conf` de chaque pod. La configuration effective, après fusion des options, se lit aussi depuis l'API, sans entrer dans le nœud :
 
 ```bash
 kubectl get --raw "/api/v1/nodes/cka-m02/proxy/configz" | tr ',' '\n' | grep -E 'staticPodPath|cgroupDriver'
@@ -248,7 +248,7 @@ Quand l'apiserver est tombé, `kubectl` ne voit plus rien ; le runtime, lui, sai
 | Consommation | `sudo crictl stats` | `kubectl top` |
 | Arrêter un conteneur | `sudo crictl stop <id>` | `kubectl delete pod` (autre effet) |
 
-La colonne `ATTEMPT` de `crictl ps -a` compte les redémarrages d'un conteneur, et un conteneur `Exited` y reste visible avec son code de sortie, là où l'API ne montre plus qu'un `CrashLoopBackOff`. Les journaux sont aussi des fichiers : `/var/log/pods/<namespace>_<pod>_<uid>/<conteneur>/0.log`, avec des liens dans `/var/log/containers/` ([chapitre 21](21-journaux-et-metriques.md)). `ctr` et `nerdctl` sont présents sur le lab mais parlent à containerd sans passer par CRI : ils voient les conteneurs de Kubernetes dans l'espace de noms containerd `k8s.io`, et rien ne les rend utiles à l'examen. Le chapitre 18 complète crictl ; le chapitre 23 s'en sert pour réparer un apiserver.
+La colonne `ATTEMPT` de `crictl ps -a` compte les redémarrages d'un conteneur, et un conteneur `Exited` y reste visible avec son code de sortie, là où l'API ne montre plus qu'un `CrashLoopBackOff`. Les journaux sont aussi des fichiers : `/var/log/pods/<namespace>_<pod>_<uid>/<conteneur>/0.log`, avec des liens dans `/var/log/containers/` ([chapitre 21.2.2](21-journaux-et-metriques.md)). `ctr` et `nerdctl` sont présents sur le lab mais parlent à containerd sans passer par CRI : ils voient les conteneurs de Kubernetes dans l'espace de noms containerd `k8s.io`, et rien ne les rend utiles à l'examen. Le chapitre 18.2.3 complète crictl ; le chapitre 23.4.3 s'en sert pour réparer un apiserver.
 
 ### 2.8 Le chemin d'une requête dans l'API server
 
@@ -289,9 +289,9 @@ Une écriture dans l'API, de bout en bout :
      envoyé par le cache de watch à tous les abonnés
 ```
 
-L'authentification ne décide de rien : elle établit une identité. Un certificat client porte l'utilisateur dans son `CN` et les groupes dans ses `O` ; c'est ainsi que `kubectl` s'identifie sur le lab ([chapitre 16](16-rbac-et-authentification.md)). L'autorisation confronte cette identité au verbe, à la ressource et au namespace demandés : le mode **Node** limite chaque kubelet à ce qui concerne son nœud, **RBAC** traite tout le reste. L'admission, enfin, ne concerne que les écritures : elle ne peut ni bloquer ni modifier une lecture.
+L'authentification ne décide de rien : elle établit une identité. Un certificat client porte l'utilisateur dans son `CN` et les groupes dans ses `O` ; c'est ainsi que `kubectl` s'identifie sur le lab ([chapitre 16.2](16-rbac-et-authentification.md)). L'autorisation confronte cette identité au verbe, à la ressource et au namespace demandés : le mode **Node** limite chaque kubelet à ce qui concerne son nœud, **RBAC** traite tout le reste. L'admission, enfin, ne concerne que les écritures : elle ne peut ni bloquer ni modifier une lecture.
 
-Kubernetes 1.37 active par défaut les contrôleurs d'admission suivants : `NamespaceLifecycle`, `LimitRanger`, `ServiceAccount`, `TaintNodesByCondition`, `PodSecurity`, `Priority`, `DefaultTolerationSeconds`, `DefaultStorageClass`, `StorageObjectInUseProtection`, `PodGroupProtection`, `PersistentVolumeClaimResize`, `RuntimeClass`, `CertificateApproval`, `CertificateSigning`, `ClusterTrustBundleAttest`, `CertificateSubjectRestriction`, `DefaultIngressClass`, `PodTopologyLabels`, `NodeDeclaredFeatureValidator`, `PodResizeValidator`, `MutatingAdmissionPolicy`, `MutatingAdmissionWebhook`, `ValidatingAdmissionPolicy`, `ValidatingAdmissionWebhook` et `ResourceQuota`. `--enable-admission-plugins` en **ajoute** ; kubeadm y met `NodeRestriction`, qui interdit à un kubelet de modifier les objets d'un autre nœud. Le chapitre 8 traite l'admission en détail.
+Kubernetes 1.37 active par défaut les contrôleurs d'admission suivants : `NamespaceLifecycle`, `LimitRanger`, `ServiceAccount`, `TaintNodesByCondition`, `PodSecurity`, `Priority`, `DefaultTolerationSeconds`, `DefaultStorageClass`, `StorageObjectInUseProtection`, `PodGroupProtection`, `PersistentVolumeClaimResize`, `RuntimeClass`, `CertificateApproval`, `CertificateSigning`, `ClusterTrustBundleAttest`, `CertificateSubjectRestriction`, `DefaultIngressClass`, `PodTopologyLabels`, `NodeDeclaredFeatureValidator`, `PodResizeValidator`, `MutatingAdmissionPolicy`, `MutatingAdmissionWebhook`, `ValidatingAdmissionPolicy`, `ValidatingAdmissionWebhook` et `ResourceQuota`. `--enable-admission-plugins` en **ajoute** ; kubeadm y met `NodeRestriction`, qui interdit à un kubelet de modifier les objets d'un autre nœud. Le chapitre 8.12 traite l'admission en détail.
 
 | Code | Étape | Message typique côté kubectl |
 |---|---|---|
@@ -302,7 +302,7 @@ Kubernetes 1.37 active par défaut les contrôleurs d'admission suivants : `Name
 | 409 | etcd | `Error from server (AlreadyExists): …` ou `the object has been modified; please apply your changes to the latest version and try again` |
 | 404 | lecture | `Error from server (NotFound): pods "x" not found` |
 
-Distinguer un 403 d'autorisation d'un 403 d'admission fait gagner du temps : le premier dit `User "…" cannot …` et se règle dans le RBAC (chapitre 16) ; le second nomme le contrôleur d'admission qui refuse (quota, PodSecurity, webhook) et se règle dans sa politique (chapitre 8). Enfin, `--dry-run=server` fait parcourir à une écriture **toute** la chaîne, admission comprise, sans l'étape ⑥ : c'est le meilleur test d'un manifeste avant de l'appliquer ([chapitre 3](03-kubectl-efficace.md)).
+Distinguer un 403 d'autorisation d'un 403 d'admission fait gagner du temps : le premier dit `User "…" cannot …` et se règle dans le RBAC (chapitre 16) ; le second nomme le contrôleur d'admission qui refuse (quota, PodSecurity, webhook) et se règle dans sa politique (chapitre 8). Enfin, `--dry-run=server` fait parcourir à une écriture **toute** la chaîne, admission comprise, sans l'étape ⑥ : c'est le meilleur test d'un manifeste avant de l'appliquer ([chapitre 3.2](03-kubectl-efficace.md)).
 
 ### 2.9 Du `kubectl apply` au conteneur
 
@@ -343,7 +343,7 @@ kubectl apply -f front.yaml  →  trois conteneurs nginx qui reçoivent du trafi
           l'IP du Service mène désormais à ce pod
 ```
 
-Quatre leçons en découlent. **Personne ne se parle directement** : le scheduler ignore le kubelet, le contrôleur Deployment ignore le scheduler ; ils se coordonnent par les objets. **Chaque étape laisse une trace** : les événements `ScalingReplicaSet` (Deployment), `SuccessfulCreate` (ReplicaSet), `Scheduled` (scheduler), `Pulling`, `Pulled`, `Created`, `Started` (kubelet). Un pod bloqué se diagnostique donc en cherchant **la dernière trace écrite** : pas de `Scheduled`, regarde le scheduler ; `Scheduled` mais pas de `Pulled`, regarde l'image ou le nœud. **Une étape en panne n'arrête que la suite** : sans scheduler, Deployment et ReplicaSet existent, les pods aussi, mais en `Pending`. **Le chemin est asynchrone** : `kubectl apply` rend la main après l'étape ②, quand rien ne tourne encore ; d'où `kubectl rollout status` et `kubectl wait` (chapitre 3).
+Quatre leçons en découlent. **Personne ne se parle directement** : le scheduler ignore le kubelet, le contrôleur Deployment ignore le scheduler ; ils se coordonnent par les objets. **Chaque étape laisse une trace** : les événements `ScalingReplicaSet` (Deployment), `SuccessfulCreate` (ReplicaSet), `Scheduled` (scheduler), `Pulling`, `Pulled`, `Created`, `Started` (kubelet). Un pod bloqué se diagnostique donc en cherchant **la dernière trace écrite** : pas de `Scheduled`, regarde le scheduler ; `Scheduled` mais pas de `Pulled`, regarde l'image ou le nœud. **Une étape en panne n'arrête que la suite** : sans scheduler, Deployment et ReplicaSet existent, les pods aussi, mais en `Pending`. **Le chemin est asynchrone** : `kubectl apply` rend la main après l'étape ②, quand rien ne tourne encore ; d'où `kubectl rollout status` et `kubectl wait` (chapitres 5.5 et 3.9.2).
 
 ```bash
 kubectl create deployment demo --image=nginx:1.30.6-alpine --replicas=3
@@ -397,14 +397,14 @@ Cette reprise n'est possible que si l'historique existe encore. Comme l'apiserve
 
 #### 2.10.4 Le cache de watch et ses conséquences
 
-L'apiserver ne relaie pas les watch d'etcd un par un : il tient un seul watch par type vers etcd et sert tous ses clients depuis son **cache de watch**. Depuis 1.34 (*ConsistentListFromCache*, GA), il sert aussi depuis ce cache les `list` qui demandent les données les plus récentes, après s'être assuré auprès d'etcd que le cache a rattrapé la révision courante ; la lecture d'un objet unique par son nom, elle, interroge etcd. En temps normal, cette différence est invisible. Elle devient spectaculaire après une restauration d'etcd vers une révision plus ancienne : sur le lab, après restauration, `kubectl get cm temoin-apres` répondait `NotFound` (lecture dans etcd) pendant que `kubectl get cm` listait encore `temoin-apres` (cache figé sur une révision plus récente que celle d'etcd). Le chapitre 20 explique pourquoi `etcdutl snapshot restore --bump-revision … --mark-compacted` évite ce piège.
+L'apiserver ne relaie pas les watch d'etcd un par un : il tient un seul watch par type vers etcd et sert tous ses clients depuis son **cache de watch**. Depuis 1.34 (*ConsistentListFromCache*, GA), il sert aussi depuis ce cache les `list` qui demandent les données les plus récentes, après s'être assuré auprès d'etcd que le cache a rattrapé la révision courante ; la lecture d'un objet unique par son nom, elle, interroge etcd. En temps normal, cette différence est invisible. Elle devient spectaculaire après une restauration d'etcd vers une révision plus ancienne : sur le lab, après restauration, `kubectl get cm temoin-apres` répondait `NotFound` (lecture dans etcd) pendant que `kubectl get cm` listait encore `temoin-apres` (cache figé sur une révision plus récente que celle d'etcd). Le chapitre 20.7.2 explique pourquoi `etcdutl snapshot restore --bump-revision … --mark-compacted` évite ce piège.
 
 > [!note]
 > `kubectl get -w` est un watch, `kubectl get` un list, `kubectl get <nom>` un get. Avec `-v=6`, kubectl journalise chaque requête HTTP et son code, sous la forme `"Response" verb="GET" url="https://192.168.49.2:8443/api/v1/namespaces/default/configmaps?limit=500" status="200 OK"` ; avec `-w`, une seconde requête porte `resourceVersion=…&watch=true`. C'est la meilleure façon de voir ce qui précède en action (exercice 2.6).
 
 ### 2.11 Élection de leader et Leases
 
-Plusieurs apiservers peuvent servir en même temps, puisqu'ils sont sans état. Deux schedulers actifs, en revanche, placeraient le même pod deux fois, et deux contrôleurs ReplicaSet créeraient deux fois les pods manquants. Sur un control plane hautement disponible (chapitre 19), le scheduler et le controller-manager pratiquent donc l'**élection de leader** : chaque instance tente d'acquérir un verrou dans l'API, un objet **Lease** (`coordination.k8s.io/v1`) du namespace `kube-system`, nommé `kube-scheduler` ou `kube-controller-manager`. Celle qui le détient travaille ; les autres attendent.
+Plusieurs apiservers peuvent servir en même temps, puisqu'ils sont sans état. Deux schedulers actifs, en revanche, placeraient le même pod deux fois, et deux contrôleurs ReplicaSet créeraient deux fois les pods manquants. Sur un control plane hautement disponible (chapitre 19.4), le scheduler et le controller-manager pratiquent donc l'**élection de leader** : chaque instance tente d'acquérir un verrou dans l'API, un objet **Lease** (`coordination.k8s.io/v1`) du namespace `kube-system`, nommé `kube-scheduler` ou `kube-controller-manager`. Celle qui le détient travaille ; les autres attendent.
 
 | Champ ou option | Valeur par défaut | Sens |
 |---|---|---|
@@ -460,7 +460,7 @@ Ces valeurs sont des exemples ; la forme, elle, est celle de tout objet. Il y ma
 
 #### 2.12.1 Noms
 
-Un nom est unique pour un type et un namespace donnés, et seulement là : un Service et un Deployment peuvent s'appeler `front` tous les deux. L'`uid`, lui, est unique pour toute la vie du cluster : un objet supprimé puis recréé sous le même nom est un autre objet, et tout ce qui le référençait par `uid` (un `ownerReference`, une liaison `claimRef`) ne le reconnaît pas. La plupart des types exigent un nom de **sous-domaine DNS** (253 caractères au plus, minuscules, chiffres, `-` et `.`, commençant et finissant par un alphanumérique) ; les namespaces, les Services et quelques autres exigent un **label DNS** de 63 caractères au plus, sans point. Depuis 1.37 (*RelaxedServiceNameValidation*, GA), un nom de Service peut commencer par un chiffre. `generateName` demande au serveur de compléter un préfixe par un suffixe aléatoire ; `kubectl create -f` l'accepte, `kubectl apply` le refuse (`cannot use generate name with apply`), car il lui faut un nom pour retrouver l'objet à la fois suivante.
+Un nom est unique pour un type et un namespace donnés, et seulement là : un Service et un Deployment peuvent s'appeler `front` tous les deux. L'`uid`, lui, est unique pour toute la vie du cluster : un objet supprimé puis recréé sous le même nom est un autre objet, et tout ce qui le référençait par `uid` (une `ownerReference`, une liaison `claimRef`) ne le reconnaît pas. La plupart des types exigent un nom de **sous-domaine DNS** (253 caractères au plus, minuscules, chiffres, `-` et `.`, commençant et finissant par un alphanumérique) ; les namespaces, les Services et quelques autres exigent un **label DNS** de 63 caractères au plus, sans point. Depuis 1.37 (*RelaxedServiceNameValidation*, GA), un nom de Service peut commencer par un chiffre. `generateName` demande au serveur de compléter un préfixe par un suffixe aléatoire ; `kubectl create -f` l'accepte, `kubectl apply` le refuse (`cannot use generate name with apply`), car il lui faut un nom pour retrouver l'objet à la fois suivante.
 
 #### 2.12.2 Labels et annotations
 
@@ -494,7 +494,7 @@ Un **finalizer** est une clé dans `metadata.finalizers` qui interdit la suppres
 
 | Finalizer | Posé sur | Retenu tant que |
 |---|---|---|
-| `kubernetes.io/pvc-protection` | PersistentVolumeClaim | un pod utilise la PVC ([chapitre 15](15-stockage.md)) |
+| `kubernetes.io/pvc-protection` | PersistentVolumeClaim | un pod utilise la PVC ([chapitre 15.5](15-stockage.md)) |
 | `kubernetes.io/pv-protection` | PersistentVolume | le PV est lié à une PVC |
 | `kubernetes` (dans `spec.finalizers`) | Namespace | le contrôleur de namespace n'a pas supprimé tout son contenu (2.15) |
 | `foregroundDeletion`, `orphan` | tout propriétaire | la suppression en cascade correspondante n'est pas terminée |
@@ -533,7 +533,7 @@ Une ressource servie en plusieurs versions est **un seul objet** : etcd le stock
 
 ### 2.15 Namespaces
 
-Un namespace est une portée de noms et un périmètre d'application : RBAC (Role, RoleBinding), quotas (ResourceQuota, LimitRange), Pod Security Admission et la plupart des NetworkPolicies s'appliquent par namespace. Ce n'est **pas** une frontière réseau : sans NetworkPolicy, un pod joint tout pod de tout namespace ([chapitre 14](14-network-policies.md)). Les namespaces ne s'emboîtent pas, et certains objets n'appartiennent à aucun : Node, PersistentVolume, StorageClass, Namespace lui-même, ClusterRole, CustomResourceDefinition, IngressClass… `kubectl api-resources --namespaced=false` en donne la liste exacte.
+Un namespace est une portée de noms et un périmètre d'application : RBAC (Role, RoleBinding), quotas (ResourceQuota, LimitRange), Pod Security Admission et la plupart des NetworkPolicies s'appliquent par namespace. Ce n'est **pas** une frontière réseau : sans NetworkPolicy, un pod joint tout pod de tout namespace ([chapitre 14.1](14-network-policies.md)). Les namespaces ne s'emboîtent pas, et certains objets n'appartiennent à aucun : Node, PersistentVolume, StorageClass, Namespace lui-même, ClusterRole, CustomResourceDefinition, IngressClass… `kubectl api-resources --namespaced=false` en donne la liste exacte.
 
 | Namespace initial | Contenu |
 |---|---|
@@ -542,7 +542,7 @@ Un namespace est une portée de noms et un périmètre d'application : RBAC (Rol
 | `kube-public` | lisible par tous, même sans authentification ; kubeadm y publie la ConfigMap `cluster-info` |
 | `kube-node-lease` | une Lease par nœud, les battements de cœur des kubelets |
 
-Un nom de namespace est un label DNS (63 caractères au plus), car il entre dans les noms DNS des Services : `api.boutique.svc.cluster.local`. Évite le préfixe `kube-`, réservé au système. Depuis 1.22, chaque namespace porte automatiquement le label `kubernetes.io/metadata.name: <nom>` : c'est lui qu'on sélectionne dans une NetworkPolicy pour désigner un namespace par son nom (chapitre 14).
+Un nom de namespace est un label DNS (63 caractères au plus), car il entre dans les noms DNS des Services : `api.boutique.svc.cluster.local`. Évite le préfixe `kube-`, réservé au système. Depuis 1.22, chaque namespace porte automatiquement le label `kubernetes.io/metadata.name: <nom>` : c'est lui qu'on sélectionne dans une NetworkPolicy pour désigner un namespace par son nom (chapitre 14.4).
 
 Supprimer un namespace supprime **tout** ce qu'il contient. L'objet passe en phase `Terminating` et reste visible tant que le contrôleur de namespace n'a pas effacé chaque objet, puis retiré le finalizer `kubernetes` de `spec.finalizers`. Pendant ce temps, l'admission `NamespaceLifecycle` refuse toute création dans ce namespace. Un namespace bloqué en `Terminating` cache presque toujours un objet retenu par son propre finalizer, ou une API agrégée indisponible qui empêche de lister certains types : `kubectl get namespace <nom> -o yaml` affiche, dans `status.conditions`, la raison exacte.
 

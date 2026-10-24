@@ -11,7 +11,7 @@ Les adresses des pods changent à chaque recréation ; une application a besoin 
 
 ### 10.1 Ce qu'est un Service
 
-Un Service est un objet de l'API qui associe trois choses : une **adresse virtuelle stable** (la ClusterIP), un **nom DNS** stable (`api.boutique.svc.cluster.local`, chapitre 11), et un **ensemble de backends** désignés le plus souvent par un sélecteur de labels. Le Service lui-même ne fait rien : il décrit une intention que quatre composants réalisent.
+Un Service est un objet de l'API qui associe trois choses : une **adresse virtuelle stable** (la ClusterIP), un **nom DNS** stable (`api.boutique.svc.cluster.local`, chapitre 11.2), et un **ensemble de backends** désignés le plus souvent par un sélecteur de labels. Le Service lui-même ne fait rien : il décrit une intention que quatre composants réalisent.
 
 ```
 QUI FAIT QUOI POUR UN SERVICE
@@ -202,7 +202,7 @@ ports:
   protocol: TCP
 ```
 
-Plusieurs détails se lisent dans cet objet. Le nom est celui du Service suivi d'un suffixe aléatoire ; le lien avec le Service passe par le label **`kubernetes.io/service-name`**, et c'est ce label qu'on filtre (`-l kubernetes.io/service-name=api`). Le label `endpointslice.kubernetes.io/managed-by` identifie le gestionnaire ; le contrôleur ne touche qu'aux tranches qui portent sa valeur, `endpointslice-controller.k8s.io`. Le port nommé `http` du Service y est résolu en numéro (`8080`) : si des pods déclaraient `http` sur des numéros différents, ils seraient rangés dans des tranches distinctes. Le champ `zone` vient du label `topology.kubernetes.io/zone` du nœud, posé au chapitre 8. Une tranche contient au plus 100 points d'accès par défaut (option `--max-endpoints-per-slice` du controller-manager, 1000 au maximum) ; au-delà, le contrôleur en crée une autre, et un client doit toujours agréger toutes les tranches d'un Service.
+Plusieurs détails se lisent dans cet objet. Le nom est celui du Service suivi d'un suffixe aléatoire ; le lien avec le Service passe par le label **`kubernetes.io/service-name`**, et c'est ce label qu'on filtre (`-l kubernetes.io/service-name=api`). Le label `endpointslice.kubernetes.io/managed-by` identifie le gestionnaire ; le contrôleur ne touche qu'aux tranches qui portent sa valeur, `endpointslice-controller.k8s.io`. Le port nommé `http` du Service y est résolu en numéro (`8080`) : si des pods déclaraient `http` sur des numéros différents, ils seraient rangés dans des tranches distinctes. Le champ `zone` vient du label `topology.kubernetes.io/zone` du nœud, posé au chapitre 8.3. Une tranche contient au plus 100 points d'accès par défaut (option `--max-endpoints-per-slice` du controller-manager, 1000 au maximum) ; au-delà, le contrôleur en crée une autre, et un client doit toujours agréger toutes les tranches d'un Service.
 
 #### Les trois conditions
 
@@ -218,7 +218,7 @@ C'est par là que la **sonde de disponibilité** (*readinessProbe*) agit sur le 
 
 #### Endpoints, l'ancienne API, est dépréciée
 
-L'API `Endpoints` (`v1`, un seul objet par Service portant le nom du Service) est **dépréciée depuis Kubernetes 1.33**. Elle reste servie et continue d'être remplie, mais elle ne gère ni le double pile ni les informations de topologie, et elle tronque la liste au-delà de 1000 adresses. Toute lecture déclenche un avertissement :
+L'API `Endpoints` (`v1`, un seul objet par Service portant le nom du Service) est **dépréciée depuis Kubernetes 1.33**. Elle reste servie et continue d'être remplie, mais elle ne gère ni la double pile ni les informations de topologie, et elle tronque la liste au-delà de 1000 adresses. Toute lecture déclenche un avertissement :
 
 ```bash
 kubectl -n boutique get endpoints api
@@ -452,7 +452,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://192.168.49.4:30080/
 200
 ```
 
-Le NodePort n'est pas un mécanisme d'exposition final : un client devrait connaître l'adresse d'un nœud vivant et un port non standard. Il sert de brique aux LoadBalancers, aux contrôleurs d'Ingress exposés par NodePort (celui de l'addon minikube, chapitre 12) et aux tests.
+Le NodePort n'est pas un mécanisme d'exposition final : un client devrait connaître l'adresse d'un nœud vivant et un port non standard. Il sert de brique aux LoadBalancers, aux contrôleurs d'Ingress exposés par NodePort (celui de l'addon minikube, chapitre 12.11) et aux tests.
 
 ### 10.8 LoadBalancer et MetalLB
 
@@ -612,7 +612,7 @@ Le pendant pour le trafic **interne** (vers la ClusterIP). `Local` restreint cha
 | `PreferSameNode` | GA depuis 1.35 | les pods du nœud du client d'abord, puis ceux de sa zone, puis tout le cluster |
 | `PreferClose` | déprécié (alias de `PreferSameZone`) | l'API accepte la valeur avec l'avertissement `spec.trafficDistribution: "PreferClose" is deprecated; use "PreferSameZone"` |
 
-Le mécanisme passe par les EndpointSlices : le contrôleur ajoute à chaque point d'accès des indices (`hints.forZones`, `hints.forNodes`), que kube-proxy utilise pour filtrer les backends. Sans le champ, la répartition est uniforme. Une politique `Local` l'emporte sur `trafficDistribution` pour le type de trafic qu'elle concerne. La préférence ne tient pas compte de la charge : si une zone a beaucoup de clients et un seul pod, ce pod sature ; d'où l'intérêt des topologySpreadConstraints du chapitre 8, que `front` utilise justement sur la zone. L'annotation plus ancienne `service.kubernetes.io/topology-mode: Auto` poursuit le même but avec une heuristique proportionnelle au CPU des zones ; si elle est présente, elle prime sur le champ.
+Le mécanisme passe par les EndpointSlices : le contrôleur ajoute à chaque point d'accès des indices (`hints.forZones`, `hints.forNodes`), que kube-proxy utilise pour filtrer les backends. Sans le champ, la répartition est uniforme. Une politique `Local` l'emporte sur `trafficDistribution` pour le type de trafic qu'elle concerne. La préférence ne tient pas compte de la charge : si une zone a beaucoup de clients et un seul pod, ce pod sature ; d'où l'intérêt des topologySpreadConstraints du chapitre 8.6, que `front` utilise justement sur la zone. L'annotation plus ancienne `service.kubernetes.io/topology-mode: Auto` poursuit le même but avec une heuristique proportionnelle au CPU des zones ; si elle est présente, elle prime sur le champ.
 
 ### 10.11 externalIPs, un champ déprécié
 

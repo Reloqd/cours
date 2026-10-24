@@ -83,7 +83,7 @@ CoreDNS est installé par `kubeadm init` (phase `addon/coredns`), dans `kube-sys
 | ConfigMap | `coredns`, clé `Corefile` | montée en `/etc/coredns/Corefile` |
 | ServiceAccount, ClusterRole, ClusterRoleBinding | `coredns`, `system:coredns` | `list` et `watch` sur endpoints, services, pods, namespaces et `endpointslices.discovery.k8s.io` |
 
-Le `dnsPolicy: Default` de CoreDNS est essentiel : CoreDNS hérite du `resolv.conf` de son nœud, ce qui lui donne ses serveurs amont, et il ne s'interroge pas lui-même. Le label `k8s-app=kube-dns` (et non `app=coredns`) sert de sélecteur au Service, aux NetworkPolicies qui autorisent le DNS (chapitre 14) et à `kubectl logs -l`.
+Le `dnsPolicy: Default` de CoreDNS est essentiel : CoreDNS hérite du `resolv.conf` de son nœud, ce qui lui donne ses serveurs amont, et il ne s'interroge pas lui-même. Le label `k8s-app=kube-dns` (et non `app=coredns`) sert de sélecteur au Service, aux NetworkPolicies qui autorisent le DNS (chapitre 14.7) et à `kubectl logs -l`.
 
 Les permissions comptent aussi : un CoreDNS qui ne peut plus lister les EndpointSlices répond `SERVFAIL` aux noms du cluster. La ClusterRole `system:coredns` doit contenir les `endpointslices` du groupe `discovery.k8s.io`.
 
@@ -177,7 +177,7 @@ kubectl -n kube-system get configmap coredns -o yaml > ~/cka/reseau/coredns-avan
 kubectl -n kube-system edit configmap coredns
 ```
 
-Le kubelet met à jour le fichier monté dans chaque pod CoreDNS (la propagation d'une ConfigMap montée prend jusqu'à une minute environ, chapitre 6), puis le plugin `reload` remarque le changement d'empreinte du fichier à son prochain contrôle (30 s ± 15 s) et recharge la configuration **sans interruption de service**. La documentation de Kubernetes conseille de compter **deux minutes**. Les journaux de CoreDNS le confirment (`Reloading` puis `Reloading complete`). Pour aller plus vite, on redémarre les pods : `kubectl -n kube-system rollout restart deployment coredns`.
+Le kubelet met à jour le fichier monté dans chaque pod CoreDNS (la propagation d'une ConfigMap montée prend jusqu'à une minute environ, chapitre 6.4), puis le plugin `reload` remarque le changement d'empreinte du fichier à son prochain contrôle (30 s ± 15 s) et recharge la configuration **sans interruption de service**. La documentation de Kubernetes conseille de compter **deux minutes**. Les journaux de CoreDNS le confirment (`Reloading` puis `Reloading complete`). Pour aller plus vite, on redémarre les pods : `kubectl -n kube-system rollout restart deployment coredns`.
 
 Le rechargement a une propriété précieuse : **si le nouveau Corefile est invalide, CoreDNS garde l'ancienne configuration** et écrit une erreur dans ses journaux (la métrique `coredns_reload_failed_total` augmente). La panne reste donc invisible… jusqu'au prochain redémarrage d'un pod CoreDNS, qui démarre avec le fichier invalide et part en `CrashLoopBackOff`. C'est la panne 16 du chapitre 23. Après chaque modification, regarde les journaux avant de passer à autre chose.
 
@@ -191,7 +191,7 @@ Le bloc `hosts` sert une liste au format de `/etc/hosts` écrite **dans** le Cor
 - un nom présent avec une adresse IPv4 seulement reçoit une réponse vide (NOERROR, sans erreur) à une requête AAAA ;
 - **un seul** bloc `hosts` par bloc serveur : en ajouter un second fait échouer le chargement (`plugin/hosts: this plugin can only be used once per Server Block`). On ajoute donc des lignes au bloc existant.
 
-Le fil rouge s'en sert à l'exercice 11.4 : `boutique.example` et `api.boutique.example` doivent résoudre vers l'adresse du nœud `cka`, où écoutera le contrôleur d'Ingress du chapitre 12. Le bloc devient :
+Le fil rouge s'en sert à l'exercice 11.4 : `boutique.example` et `api.boutique.example` doivent résoudre vers l'adresse du nœud `cka`, où écoutera le contrôleur d'Ingress du chapitre 12.11. Le bloc devient :
 
 ```
     hosts {
@@ -365,7 +365,7 @@ MÉTHODE : « LE DNS NE MARCHE PAS »
   6. Que disent les journaux ?
        kubectl -n kube-system logs -l k8s-app=kube-dns --prefix --tail=30
        (ajouter le plugin log au Corefile pour voir chaque requête)
-  7. Une NetworkPolicy bloque-t-elle UDP ou TCP 53 ? (chapitre 14)
+  7. Une NetworkPolicy bloque-t-elle UDP ou TCP 53 ? (chapitre 14.7)
        délai d'attente au lieu de NXDOMAIN → filtrage
   8. L'amont répond-il ? (noms extérieurs seulement)
        resolv.conf du nœud, plugin forward
@@ -622,7 +622,7 @@ Sauvegarde la ConfigMap `coredns` dans `~/cka/reseau/coredns-avant.yaml`. Ajoute
 > kubectl -n boutique exec outils -- nslookup api.boutique.example
 > ```
 >
-> Les journaux montrent `Reloading`, une ligne `plugin/reload: Running configuration SHA512 = …`, puis `Reloading complete` sur chaque pod (40 s et 65 s après le `replace` sur le lab), ou, après le redémarrage, de nouveaux pods sans erreur. Les deux noms en `.example` résolvent vers `192.168.49.2`, et le nom du Service `api` résout toujours vers sa ClusterIP : le `fallthrough` a bien laissé passer la requête vers le plugin `kubernetes`. Le `nslookup` passe d'abord par la liste de recherche (2 points < 5), où `kubernetes` répond NXDOMAIN (et l'amont pour les domaines de ton poste), avant d'essayer le nom absolu ; il affiche une ligne `;; Got recursion not available from 10.96.0.10` par requête servie par CoreDNS lui-même (voir 11.1). Le contrôleur d'Ingress qui répondra sur `192.168.49.2` arrive au chapitre 12 ; pour l'instant, seul le nom est prêt.
+> Les journaux montrent `Reloading`, une ligne `plugin/reload: Running configuration SHA512 = …`, puis `Reloading complete` sur chaque pod (40 s et 65 s après le `replace` sur le lab), ou, après le redémarrage, de nouveaux pods sans erreur. Les deux noms en `.example` résolvent vers `192.168.49.2`, et le nom du Service `api` résout toujours vers sa ClusterIP : le `fallthrough` a bien laissé passer la requête vers le plugin `kubernetes`. Le `nslookup` passe d'abord par la liste de recherche (2 points < 5), où `kubernetes` répond NXDOMAIN (et l'amont pour les domaines de ton poste), avant d'essayer le nom absolu ; il affiche une ligne `;; Got recursion not available from 10.96.0.10` par requête servie par CoreDNS lui-même (voir l'exercice 11.1). Le contrôleur d'Ingress qui répondra sur `192.168.49.2` arrive au chapitre 12.11 ; pour l'instant, seul le nom est prêt.
 >
 > En cas d'erreur dans l'édition, rétablis la sauvegarde : `kubectl replace -f ~/cka/reseau/coredns-avant.yaml`.
 >

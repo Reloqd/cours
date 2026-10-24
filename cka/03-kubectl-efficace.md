@@ -159,12 +159,12 @@ Le pod jetable, interactif, est l'outil de test réseau par excellence : `kubect
 | `role`, `clusterrole` | `kubectl create role developpeur --verb=get,list --resource=pods,pods/log` | interroge l'API pour valider les ressources |
 | `rolebinding`, `clusterrolebinding` | `--role=… \| --clusterrole=…`, `--user`, `--group`, `--serviceaccount=boutique:deployeur` | |
 | `serviceaccount` | `kubectl create serviceaccount deployeur` | |
-| `token` | `kubectl create token deployeur --duration=1h` | jeton lié, non stocké (3.9) |
+| `token` | `kubectl create token deployeur --duration=1h` | jeton lié, non stocké (3.9.4) |
 | `quota` | `kubectl create quota q --hard=pods=30,requests.cpu=4` | |
 | `poddisruptionbudget` | `kubectl create pdb front --selector=app=front --min-available=2` | |
 | `priorityclass` | `kubectl create priorityclass boutique-critique --value=100000` | |
 
-`kubectl autoscale deployment api --min=2 --max=6 --cpu=50%` crée un HorizontalPodAutoscaler `autoscaling/v2`. En 1.37, l'option se nomme **`--cpu`** (pourcentage ou quantité, `--memory` existe aussi) ; l'ancienne `--cpu-percent` fonctionne encore mais affiche `Flag --cpu-percent has been deprecated`. Le comportement de descente, lui, ne se génère pas ([chapitre 7](07-autoscaling.md)).
+`kubectl autoscale deployment api --min=2 --max=6 --cpu=50%` crée un HorizontalPodAutoscaler `autoscaling/v2`. En 1.37, l'option se nomme **`--cpu`** (pourcentage ou quantité, `--memory` existe aussi) ; l'ancienne `--cpu-percent` fonctionne encore mais affiche `Flag --cpu-percent has been deprecated`. Le comportement de descente, lui, ne se génère pas ([chapitre 7.8](07-autoscaling.md)).
 
 #### 3.3.3 kubectl expose
 
@@ -175,7 +175,7 @@ kubectl expose deployment api --port=8080 --target-port=http -n boutique
 kubectl expose deployment front --port=80 --type=NodePort --name=front-np -n boutique
 ```
 
-Il accepte les pods, Services, Deployments, ReplicaSets et ReplicationControllers, à condition que leur sélecteur se réduise à des `matchLabels`. Sans `--port`, il reprend les ports déclarés par les conteneurs ; sans `--name`, il prend le nom de l'objet exposé. Il ne sait pas fixer un `nodePort` précis : pour `30080`, on génère avec `--dry-run=client -o yaml` et on ajoute la ligne, ou on patche après coup ([chapitre 10](10-services.md)).
+Il accepte les pods, Services, Deployments, ReplicaSets et ReplicationControllers, à condition que leur sélecteur se réduise à des `matchLabels`. Sans `--port`, il reprend les ports déclarés par les conteneurs ; sans `--name`, il prend le nom de l'objet exposé. Il ne sait pas fixer un `nodePort` précis : pour `30080`, on génère avec `--dry-run=client -o yaml` et on ajoute la ligne, ou on patche après coup ([chapitre 10.7](10-services.md)).
 
 #### 3.3.4 Ce qui ne se génère pas
 
@@ -188,7 +188,7 @@ kubectl create deployment agent-noeud --image=busybox:1.37.0 --dry-run=client -o
   > ~/cka/boutique/brouillon-agent-noeud.yaml
 ```
 
-Oublier `strategy: {}` donnerait, à l'apply, une erreur de champ inconnu : la validation stricte est la valeur par défaut de `--validate`.
+Oublier de retirer `strategy: {}` donnerait, à l'apply, une erreur de champ inconnu : la validation stricte est la valeur par défaut de `--validate`.
 
 #### 3.3.5 Variables d'accélération
 
@@ -401,7 +401,7 @@ kubectl patch deployment front -n boutique --type=json \
 kubectl patch deployment front -n boutique --subresource=scale --type=merge -p '{"spec":{"replicas":3}}'
 ```
 
-Le premier patch, stratégique, ne touche que l'image du conteneur `nginx` et garde ses ports et ses ressources. Le même corps envoyé en `--type=merge` **remplacerait toute la liste** `containers` par un conteneur réduit à son nom et son image : ports, sondes et ressources disparaîtraient. `--subresource` vise une sous-ressource (`status`, `scale`, `resize` pour le redimensionnement en place des pods, [chapitre 4](04-pods.md)). `kubectl patch` répond `deployment.apps/front patched`, ou `patched (no change)` si l'objet était déjà conforme.
+Le premier patch, stratégique, ne touche que l'image du conteneur `nginx` et garde ses ports et ses ressources. Le même corps envoyé en `--type=merge` **remplacerait toute la liste** `containers` par un conteneur réduit à son nom et son image : ports, sondes et ressources disparaîtraient. `--subresource` vise une sous-ressource (`status`, `scale`, `resize` pour le redimensionnement en place des pods, [chapitre 4.12](04-pods.md)). `kubectl patch` répond `deployment.apps/front patched`, ou `patched (no change)` si l'objet était déjà conforme.
 
 #### 3.7.4 replace et les champs immuables
 
@@ -412,7 +412,7 @@ The Pod "essai" is invalid: spec: Forbidden: pod updates may not change fields o
 …
 ```
 
-Les ressources CPU et mémoire font exception par la sous-ressource `resize` (chapitre 4). Pour le reste, `kubectl replace --force -f pod.yaml` supprime l'objet, **attend** sa disparition (jusqu'à 5 minutes par défaut), puis le recrée. Le fichier peut venir de `kubectl get -o yaml` tel quel : kubectl efface la `resourceVersion` avant de recréer, et l'apiserver attribue un nouvel `uid`. L'attente comprend le délai de grâce du pod (30 s par défaut, entièrement consommé par un conteneur qui ignore SIGTERM, comme `sleep` en PID 1) ; `--grace-period=0` avec `--force` l'abrège, au prix d'une suppression immédiate.
+Les ressources CPU et mémoire font exception par la sous-ressource `resize` (chapitre 4.12). Pour le reste, `kubectl replace --force -f pod.yaml` supprime l'objet, **attend** sa disparition (jusqu'à 5 minutes par défaut), puis le recrée. Le fichier peut venir de `kubectl get -o yaml` tel quel : kubectl efface la `resourceVersion` avant de recréer, et l'apiserver attribue un nouvel `uid`. L'attente comprend le délai de grâce du pod (30 s par défaut, entièrement consommé par un conteneur qui ignore SIGTERM, comme `sleep` en PID 1) ; `--grace-period=0` avec `--force` l'abrège, au prix d'une suppression immédiate.
 
 #### 3.7.5 delete et diff
 
@@ -473,11 +473,11 @@ Le passage d'un mode à l'autre est prévu : un objet géré par `kubectl apply`
 | Situation | Choix |
 |---|---|
 | Fichiers de l'examen, objets simples | `kubectl apply -f` (côté client) : universel, rapide |
-| Grosses CRD, bundles (Gateway API, opérateurs) | `--server-side` : pas de limite d'annotation ; la procédure officielle de Gateway API l'impose ([chapitre 13](13-gateway-api.md)) |
+| Grosses CRD, bundles (Gateway API, opérateurs) | `--server-side` : pas de limite d'annotation ; la procédure officielle de Gateway API l'impose ([chapitre 13.3](13-gateway-api.md)) |
 | Plusieurs outils ou équipes sur un même objet | `--server-side --field-manager=<nom>` : les conflits deviennent visibles |
 | Un contrôleur doit garder la main sur un champ (`replicas` sous HPA) | retirer ce champ de ses manifestes, quel que soit le mode |
 
-Helm 4 installe désormais par server-side apply ([chapitre 17](17-helm-et-kustomize.md)) : les conflits de gestionnaires y deviennent un sujet courant.
+Helm 4 installe désormais par server-side apply ([chapitre 17.7.1](17-helm-et-kustomize.md)) : les conflits de gestionnaires y deviennent un sujet courant.
 
 ### 3.9 Observer et attendre : events, wait, exec, token
 

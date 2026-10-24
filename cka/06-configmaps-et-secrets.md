@@ -137,7 +137,7 @@ Le kubelet ne copie pas les clés directement sous le point de montage. Il écri
             répertoire ; la bascule de ..data ne le concerne pas.
 ```
 
-Le moment de la mise à jour dépend de deux délais. Le kubelet vérifie les volumes de chaque pod à chaque **synchronisation périodique** (`syncFrequency`, 1 minute par défaut dans la configuration du kubelet), et il lit la ConfigMap dans un cache local alimenté, par défaut, par un **watch** sur l'API (`configMapAndSecretChangeDetectionStrategy: Watch`). Le délai total peut donc atteindre la période de synchronisation plus la propagation du watch : comptez jusqu'à une minute environ, parfois un peu plus, et des pods différents du même Deployment voient le changement à des instants différents. Modifier une annotation du pod déclenche une synchronisation immédiate.
+Le moment de la mise à jour dépend de deux délais. Le kubelet vérifie les volumes de chaque pod à chaque **synchronisation périodique** (`syncFrequency`, 1 minute par défaut dans la configuration du kubelet), et il lit la ConfigMap dans un cache local alimenté, par défaut, par un **watch** sur l'API (`configMapAndSecretChangeDetectionStrategy: Watch`). Le délai total peut donc atteindre la période de synchronisation plus la propagation du watch : compte jusqu'à une minute environ, parfois un peu plus, et des pods différents du même Deployment voient le changement à des instants différents. Modifier une annotation du pod déclenche une synchronisation immédiate.
 
 #### Ce que chaque consommateur voit
 
@@ -151,7 +151,7 @@ Le moment de la mise à jour dépend de deux délais. Le kubelet vérifie les vo
 « Le fichier a changé » ne veut pas dire « l'application a changé ». nginx sert les fichiers statiques à chaque requête : un nouvel `index.html` est visible dès la bascule. Mais il lit sa configuration au démarrage : un nouveau `default.conf` reste ignoré jusqu'à un `nginx -s reload` ou un redémarrage. Dans un Deployment, la façon propre est `kubectl -n boutique rollout restart deployment/front`, qui remplace les pods progressivement, sans coupure.
 
 > [!note] Rendre la mise à jour explicite
-> Deux pratiques évitent ces ambiguïtés. La première : nommer chaque version de configuration différemment (`front-conf-v2`) et changer la référence dans le modèle du Deployment ; le changement de modèle déclenche un rollout, et le retour arrière ramène l'ancienne configuration avec l'ancienne révision. C'est ce que fait automatiquement le générateur `configMapGenerator` de Kustomize, en suffixant le nom d'un hachage du contenu ([chapitre 17](17-helm-et-kustomize.md)). La seconde : rendre ces ConfigMaps immuables (section 6.7).
+> Deux pratiques évitent ces ambiguïtés. La première : nommer chaque version de configuration différemment (`front-conf-v2`) et changer la référence dans le modèle du Deployment ; le changement de modèle déclenche un rollout, et le retour arrière ramène l'ancienne configuration avec l'ancienne révision. C'est ce que fait automatiquement le générateur `configMapGenerator` de Kustomize, en suffixant le nom d'un hachage du contenu ([chapitre 17.10](17-helm-et-kustomize.md)). La seconde : rendre ces ConfigMaps immuables (section 6.7).
 
 ### 6.5 Secrets : ce qui change, ce qui ne change pas
 
@@ -192,8 +192,8 @@ Le type du Secret (`type`) indique les clés attendues et permet à l'API de les
 | `kubernetes.io/dockercfg` | ancien format `~/.dockercfg` | `.dockercfg` | |
 | `kubernetes.io/basic-auth` | identifiant et mot de passe | `username`, `password` | |
 | `kubernetes.io/ssh-auth` | clé SSH | `ssh-privatekey` | |
-| `kubernetes.io/service-account-token` | jeton de ServiceAccount à longue durée, créé à la main | `token`, `ca.crt`, `namespace` | ([chapitre 16](16-rbac-et-authentification.md)) |
-| `bootstrap.kubernetes.io/token` | jeton d'amorçage de kubeadm | `token-id`, `token-secret`… | ([chapitre 19](19-kubeadm-installation-ha-et-mises-a-jour.md)) |
+| `kubernetes.io/service-account-token` | jeton de ServiceAccount à longue durée, créé à la main | `token`, `ca.crt`, `namespace` | ([chapitre 16.9](16-rbac-et-authentification.md)) |
+| `bootstrap.kubernetes.io/token` | jeton d'amorçage de kubeadm | `token-id`, `token-secret`… | ([chapitre 19.3.3](19-kubeadm-installation-ha-et-mises-a-jour.md)) |
 
 Comme une ConfigMap, un Secret est limité à **1 Mio**. Monté en volume, chaque clé donne un fichier en mode `0644` par défaut ; `defaultMode: 0400` le restreint. En YAML, `0400` est lu comme un nombre octal ; en JSON, qui ne connaît pas l'octal, il faut écrire la valeur décimale `256`.
 
@@ -211,7 +211,7 @@ kubectl -n boutique create secret docker-registry registre-prive \
 
 La clé `.dockerconfigjson` contient alors, encodé en base64, le JSON `{"auths":{"registre.example":{"username":"lecteur","password":"s3cret","auth":"bGVjdGV1cjpzM2NyZXQ="}}}`, où `auth` n'est que `lecteur:s3cret` en base64. Sans `--docker-server`, le générateur vise `https://index.docker.io/v1/`.
 
-Le pod désigne ce Secret dans `spec.imagePullSecrets`, une liste de noms de Secrets **du même namespace**, valable pour tous ses conteneurs. Le kubelet présente au registre les identifiants dont le nom de serveur correspond à l'image ; les autres sont ignorés, si bien qu'un pod peut tirer des images publiques et privées. Pour ne pas répéter la liste dans chaque pod, on l'attache au ServiceAccount : l'admission `ServiceAccount` la recopie dans tout pod qui utilise ce compte ([chapitre 16](16-rbac-et-authentification.md)).
+Le pod désigne ce Secret dans `spec.imagePullSecrets`, une liste de noms de Secrets **du même namespace**, valable pour tous ses conteneurs. Le kubelet présente au registre les identifiants dont le nom de serveur correspond à l'image ; les autres sont ignorés, si bien qu'un pod peut tirer des images publiques et privées. Pour ne pas répéter la liste dans chaque pod, on l'attache au ServiceAccount : l'admission `ServiceAccount` la recopie dans tout pod qui utilise ce compte ([chapitre 16.9](16-rbac-et-authentification.md)).
 
 Un Secret référencé mais absent n'empêche pas le pod d'être créé : le kubelet tente le téléchargement sans ces identifiants et ne le note que dans son journal (`"Unable to retrieve pull secret, the image pull may not succeed." … secret="boutique/registre-absent"`). Depuis 1.37, l'événement `FailedToRetrieveImagePullSecret` (`Unable to retrieve some image pull secrets (registre-absent); attempting to pull the image may not succeed.`) n'est plus émis qu'en cas d'**échec** du téléchargement : un pod qui démarre normalement n'en porte aucun, même avec un Secret absent dans sa liste. Si l'image est vraiment privée, le pod finit en `ErrImagePull` puis `ImagePullBackOff`, et l'événement accompagne alors chaque échec en nommant le Secret manquant.
 
@@ -243,7 +243,7 @@ La downward API expose au conteneur des informations sur **son propre pod**, san
 | `status.podIP`, `status.podIPs`, `status.hostIP`, `status.hostIPs` | oui | non |
 | `resourceFieldRef` : `requests.cpu`, `limits.cpu`, `requests.memory`, `limits.memory`, `…ephemeral-storage`, `…hugepages-*` | oui | oui |
 
-Une limit absente est remplacée par l'allocatable du nœud. `divisor` règle l'unité de la valeur exposée (`1Mi` pour des mébioctets, `1m` pour des millicœurs). Le volume suit les changements : un label modifié, ou une ressource redimensionnée en place ([chapitre 4.12](04-pods.md)), se retrouve dans le fichier ; la variable, elle, garde la valeur du démarrage. Le DaemonSet `agent-noeud` du [chapitre 5](05-deployments-et-controleurs.md) lit ainsi `spec.nodeName` dans `NODE_NAME`.
+Une limit absente est remplacée par l'allocatable du nœud. `divisor` règle l'unité de la valeur exposée (`1Mi` pour des mébioctets, `1m` pour des millicœurs). Le volume suit les changements : un label modifié, ou une ressource redimensionnée en place ([chapitre 4.12](04-pods.md)), se retrouve dans le fichier ; la variable, elle, garde la valeur du démarrage. Le DaemonSet `agent-noeud` de l'[exercice 5.5](05-deployments-et-controleurs.md) lit ainsi `spec.nodeName` dans `NODE_NAME`.
 
 #### Les volumes projetés
 
@@ -272,13 +272,13 @@ Un volume `projected` réunit dans un **même répertoire** plusieurs sources : 
           path: jeton
 ```
 
-La source `serviceAccountToken` produit un jeton lié au pod, pour une audience donnée, avec une durée de validité d'une heure par défaut (600 secondes au minimum), renouvelé automatiquement par le kubelet : c'est le mécanisme même qui fournit son jeton à chaque pod ([chapitre 16](16-rbac-et-authentification.md)). Comme pour les autres volumes, un montage par `subPath` ne reçoit aucune mise à jour.
+La source `serviceAccountToken` produit un jeton lié au pod, pour une audience donnée, avec une durée de validité d'une heure par défaut (600 secondes au minimum), renouvelé automatiquement par le kubelet : c'est le mécanisme même qui fournit son jeton à chaque pod ([chapitre 16.9](16-rbac-et-authentification.md)). Comme pour les autres volumes, un montage par `subPath` ne reçoit aucune mise à jour.
 
 ### 6.9 Chiffrer les Secrets au repos
 
 #### Le problème
 
-Le serveur d'API écrit chaque objet dans etcd, sous une clé `/registry/<ressource>/<namespace>/<nom>`. Par défaut, il l'écrit **tel quel**, sérialisé en protobuf : le préfixe `k8s` suivi d'un octet nul, puis les champs de l'objet, valeurs des Secrets comprises, **en clair** (le base64 n'existe que dans la représentation JSON de l'API). Quiconque lit le répertoire de données d'etcd, une sauvegarde ([chapitre 20](20-etcd-sauvegarde-et-restauration.md)) ou un disque recyclé lit tous les mots de passe du cluster.
+Le serveur d'API écrit chaque objet dans etcd, sous une clé `/registry/<ressource>/<namespace>/<nom>`. Par défaut, il l'écrit **tel quel**, sérialisé en protobuf : le préfixe `k8s` suivi d'un octet nul, puis les champs de l'objet, valeurs des Secrets comprises, **en clair** (le base64 n'existe que dans la représentation JSON de l'API). Quiconque lit le répertoire de données d'etcd, une sauvegarde ([chapitre 20.6](20-etcd-sauvegarde-et-restauration.md)) ou un disque recyclé lit tous les mots de passe du cluster.
 
 Le chiffrement au repos (*encryption at rest*) fait chiffrer par l'API server les ressources choisies avant de les écrire. Il se configure par un fichier `EncryptionConfiguration` passé à l'option `--encryption-provider-config` du kube-apiserver.
 
@@ -335,7 +335,7 @@ Les fournisseurs locaux (`aescbc`, `aesgcm`, `secretbox`) gardent la clé dans l
 
 1. Générer une clé de 32 octets aléatoires, encodée en base64 : `head -c 32 /dev/urandom | base64`.
 2. Écrire le fichier sur le control plane, par convention `/etc/kubernetes/enc/enc.yaml`, en mode `0600`.
-3. Sauvegarder le manifeste de l'API server **hors** de `/etc/kubernetes/manifests` : une copie laissée dans ce dossier, même nommée `.bak`, est chargée comme un second pod statique ([chapitre 2](02-architecture.md)).
+3. Sauvegarder le manifeste de l'API server **hors** de `/etc/kubernetes/manifests` : une copie laissée dans ce dossier, même nommée `.bak`, est chargée comme un second pod statique ([chapitre 2.5](02-architecture.md)).
 4. Dans `/etc/kubernetes/manifests/kube-apiserver.yaml`, ajouter l'option, le montage et le volume :
 
 ```yaml

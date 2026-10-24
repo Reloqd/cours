@@ -112,7 +112,7 @@ Ce que le retrait ne change pas : **l'API Ingress**. Elle reste GA dans Kubernet
 > **ingress-nginx** (dépôt `kubernetes/ingress-nginx`, IngressClass habituelle `nginx`, contrôleur `k8s.io/ingress-nginx`) est le projet retiré. Le **NGINX Ingress Controller** édité par F5 est un autre logiciel, toujours maintenu, qui figure dans la liste des contrôleurs de kubernetes.io. Leurs annotations ne sont pas compatibles. Ne les confonds pas en lisant une documentation.
 
 > [!info] minikube ≠ examen
-> minikube v1.39.0 installe toujours ingress-nginx **v1.15.1** par l'addon `ingress`, sans avertissement de dépréciation, et propose un nouvel addon `traefik`. Ce cours garde l'addon `ingress` : l'API qu'on y pratique est exactement celle de l'examen, et l'Ingress `boutique` servira de point de départ à la migration vers la Gateway API au chapitre 13. Sur le cluster de l'examen, vérifie toujours la classe disponible avec `kubectl get ingressclass` avant d'écrire un Ingress.
+> minikube v1.39.0 installe toujours ingress-nginx **v1.15.1** par l'addon `ingress`, sans avertissement de dépréciation, et propose un nouvel addon `traefik`. Ce cours garde l'addon `ingress` : l'API qu'on y pratique est exactement celle de l'examen, et l'Ingress `boutique` servira de point de départ à la migration vers la Gateway API au chapitre 13.13. Sur le cluster de l'examen, vérifie toujours la classe disponible avec `kubectl get ingressclass` avant d'écrire un Ingress.
 
 ### 12.4 Anatomie d'un Ingress
 
@@ -430,7 +430,7 @@ Il installe ingress-nginx v1.15.1 et kube-webhook-certgen v1.6.9 dans le namespa
 | Service `ingress-nginx-controller-admission` (ClusterIP 443) | webhook de validation des Ingress |
 | IngressClass `nginx`, contrôleur `k8s.io/ingress-nginx`, classe par défaut | rattachement des Ingress |
 
-Le contrôleur est épinglé au nœud control plane par `nodeSelector: minikube.k8s.io/primary: "true"` et publie les **`hostPort` 80 et 443** : le nœud `cka` (192.168.49.2) répond donc directement sur les ports 80 et 443, ce qui donne une adresse stable au lab. C'est cette adresse que le chapitre 11 a placée dans le bloc `hosts` du Corefile pour `boutique.example` et `api.boutique.example`. Les workers n'ont pas de `hostPort` : `curl http://192.168.49.3/` échoue, alors que le NodePort du Service répond sur tous les nœuds.
+Le contrôleur est épinglé au nœud control plane par `nodeSelector: minikube.k8s.io/primary: "true"` et publie les **`hostPort` 80 et 443** : le nœud `cka` (192.168.49.2) répond donc directement sur les ports 80 et 443, ce qui donne une adresse stable au lab. C'est cette adresse que le chapitre 11.5 a placée dans le bloc `hosts` du Corefile pour `boutique.example` et `api.boutique.example`. Les workers n'ont pas de `hostPort` : `curl http://192.168.49.3/` échoue, alors que le NodePort du Service répond sur tous les nœuds.
 
 ```
 L'ADDON INGRESS DANS LE LAB
@@ -457,7 +457,7 @@ Le pod du contrôleur n'est pas en `hostNetwork` avec containerd (l'addon ne l'a
 
 ### 12.12 L'Ingress de la boutique
 
-Le fil rouge expose deux hôtes : `boutique.example` vers `front:80`, `api.boutique.example` vers `api:8080`, tous deux en HTTPS avec le Secret `boutique-tls`, un certificat autosigné valable pour `boutique.example` et `*.boutique.example`. Le joker couvrira aussi `gw.boutique.example` au chapitre 13.
+Le fil rouge expose deux hôtes : `boutique.example` vers `front:80`, `api.boutique.example` vers `api:8080`, tous deux en HTTPS avec le Secret `boutique-tls`, un certificat autosigné valable pour `boutique.example` et `*.boutique.example`. Le joker couvrira aussi `gw.boutique.example` au chapitre 13.15.
 
 Le certificat se fabrique avec openssl. Les clients modernes, curl compris, ignorent le CN et ne regardent que l'extension `subjectAltName` : elle est indispensable.
 
@@ -541,7 +541,7 @@ api-7d9c5b8f6-q8rtn
 
 La première requête montre la redirection 308 d'ingress-nginx. La deuxième sert la page de la ConfigMap `front-html` (chapitre 6). La troisième atteint `api` par son propre hôte. La quatrième passe par `front`, dont la configuration nginx relaie `/api/` vers le Service `api` : deux proxys en chaîne. `--cacert` fait vérifier le certificat par curl, ce qui teste aussi le Secret ; `-k` désactiverait cette vérification et masquerait une erreur de Secret.
 
-Depuis le cluster, le Corefile modifié au chapitre 11 résout les deux noms vers 192.168.49.2 : `kubectl -n boutique exec outils -- curl -sk https://boutique.example/` donne la même page.
+Depuis le cluster, le Corefile modifié au chapitre 11.5 résout les deux noms vers 192.168.49.2 : `kubectl -n boutique exec outils -- curl -sk https://boutique.example/` donne la même page.
 
 ### 12.13 Dépanner un Ingress
 
@@ -686,7 +686,7 @@ Dans `~/cka/boutique/`, crée une clé RSA 2048 bits et un certificat autosigné
 >   --cert=boutique-tls.crt --key=boutique-tls.key
 > ```
 >
-> `kubectl create secret tls` vérifie que la clé correspond au certificat, encode les deux fichiers en base64 et pose le type `kubernetes.io/tls` avec les clés `tls.crt` et `tls.key` qu'attendent les contrôleurs. Le joker `*.boutique.example` servira aussi au Gateway du chapitre 13.
+> `kubectl create secret tls` vérifie que la clé correspond au certificat, encode les deux fichiers en base64 et pose le type `kubernetes.io/tls` avec les clés `tls.crt` et `tls.key` qu'attendent les contrôleurs. Le joker `*.boutique.example` servira aussi au Gateway du chapitre 13.15.
 >
 > **Vérification** :
 > ```bash

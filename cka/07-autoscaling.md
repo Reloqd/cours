@@ -51,7 +51,7 @@ Le dernier rang du tableau fixe tes priorités : le HPA doit être un réflexe, 
 
 ### 7.2 Ce que les requests deviennent pour l'autoscaling
 
-Le [chapitre 4](04-pods.md) a montré le double rôle des ressources d'un conteneur : la `request` est une réservation comptée par le scheduler, la `limit` une borne imposée par le noyau (quota CFS pour le CPU, OOM kill pour la mémoire). L'autoscaling ajoute un troisième rôle à la request : elle devient le **dénominateur** de l'utilisation.
+Le [chapitre 4.6](04-pods.md) a montré le double rôle des ressources d'un conteneur : la `request` est une réservation comptée par le scheduler, la `limit` une borne imposée par le noyau (quota CFS pour le CPU, OOM kill pour la mémoire). L'autoscaling ajoute un troisième rôle à la request : elle devient le **dénominateur** de l'utilisation.
 
 Quand un HPA vise `averageUtilization: 50` sur le CPU, il ne vise pas 50 % d'un cœur ni 50 % de la limite, mais 50 % de la request. Pour un pod `api` (requests `cpu: 50m`), la cible est donc 25 millicœurs en moyenne. Deux conséquences en découlent. D'abord, l'utilisation peut dépasser 100 % : un pod `api` qui consomme 200m (permis par sa limite de 500m) affiche 400 %. Ensuite, une request mal choisie fausse tout l'autoscaling : trop basse, le HPA ajoute des pods au moindre frémissement ; trop haute, il ne réagit jamais.
 
@@ -134,7 +134,7 @@ Les deux installations ne passent pas les mêmes options au conteneur :
 
 #### Pourquoi `--kubelet-insecure-tls` existe
 
-metrics-server parle aux kubelets en HTTPS et vérifie par défaut leur certificat de **service** (celui que présente le kubelet sur le port 10250). Or un kubelet installé par kubeadm ou minikube génère par défaut un certificat de service **autosigné**, que la CA du cluster ne connaît pas. La vérification échoue et metrics-server journalise des erreurs `x509: cannot validate certificate`. Deux solutions : désactiver la vérification par `--kubelet-insecure-tls` (ce que fait minikube, acceptable pour un lab, pas pour la production), ou activer `serverTLSBootstrap: true` dans la configuration des kubelets pour qu'ils demandent un certificat signé par la CA du cluster, au prix d'une approbation manuelle de leurs CertificateSigningRequest (le mécanisme des CSR est au [chapitre 16](16-rbac-et-authentification.md)).
+metrics-server parle aux kubelets en HTTPS et vérifie par défaut leur certificat de **service** (celui que présente le kubelet sur le port 10250). Or un kubelet installé par kubeadm ou minikube génère par défaut un certificat de service **autosigné**, que la CA du cluster ne connaît pas. La vérification échoue et metrics-server journalise des erreurs `x509: cannot validate certificate`. Deux solutions : désactiver la vérification par `--kubelet-insecure-tls` (ce que fait minikube, acceptable pour un lab, pas pour la production), ou activer `serverTLSBootstrap: true` dans la configuration des kubelets pour qu'ils demandent un certificat signé par la CA du cluster, au prix d'une approbation manuelle de leurs CertificateSigningRequest (le mécanisme des CSR est au [chapitre 16.3](16-rbac-et-authentification.md)).
 
 #### Diagnostic
 
@@ -151,10 +151,10 @@ NAME                     SERVICE                      AVAILABLE   AGE
 v1beta1.metrics.k8s.io   kube-system/metrics-server   True        2m
 ```
 
-Une colonne `AVAILABLE` à `False (MissingEndpoints)` signifie que le pod n'est pas prêt ; `False (FailedDiscoveryCheck)` que l'apiserver n'arrive pas à le joindre (réseau, NetworkPolicy). Côté client, `error: Metrics API not available` traduit une APIService indisponible, et `error: metrics not available yet` une API qui répond sans avoir encore de points pour l'objet demandé : il faut au moins une collecte complète après le démarrage du pod.
+Une colonne `AVAILABLE` à `False (MissingEndpoints)` signifie que le pod n'est pas prêt ; `False (FailedDiscoveryCheck)` que l'apiserver n'arrive pas à le joindre (réseau, NetworkPolicy). Côté client, `error: Metrics API not available` traduit un APIService indisponible, et `error: metrics not available yet` une API qui répond sans avoir encore de points pour l'objet demandé : il faut au moins une collecte complète après le démarrage du pod.
 
 > [!info] minikube ≠ examen
-> Sous minikube, l'addon collecte toutes les **60 s** (`--metric-resolution=60s`) et ignore la vérification TLS des kubelets. Sur le lab, `kubectl top nodes` répond environ 63 s après `addons enable`, et à nouveau environ une minute après chaque `minikube -p cka start`. Sur un cluster d'examen installé avec le manifeste amont, la collecte a lieu toutes les **15 s** ; metrics-server y est généralement déjà installé, et l'énoncé le dit s'il faut l'installer.
+> Sous minikube, l'addon collecte toutes les **60 s** (`--metric-resolution=60s`) et ignore la vérification TLS des kubelets. Sur le lab, `kubectl top nodes` répond environ une minute après `addons enable` (63 s et 69 s selon les mesures, voir l'exercice 7.1), et à nouveau environ une minute après chaque `minikube -p cka start`. Sur un cluster d'examen installé avec le manifeste amont, la collecte a lieu toutes les **15 s** ; metrics-server y est généralement déjà installé, et l'énoncé le dit s'il faut l'installer.
 
 ### 7.5 kubectl top
 
@@ -190,7 +190,7 @@ kubectl top pods -n boutique --sort-by=cpu --no-headers | head -1 | awk '{print 
 
 ### 7.6 Le HorizontalPodAutoscaler : objet et boucle de contrôle
 
-Le HPA est à la fois un objet de l'API (groupe `autoscaling`, version stable `v2` ; la `v1` reste servie mais ne connaît que le CPU) et un contrôleur intégré au kube-controller-manager. Le contrôleur ne touche jamais aux pods : il écrit le nombre de réplicas souhaité dans la sous-ressource `scale` de sa cible, désignée par `spec.scaleTargetRef`. Toute ressource qui expose `/scale` peut donc être autoscalée : Deployment, ReplicaSet, StatefulSet, ReplicationController, et les ressources personnalisées dont la CRD déclare la sous-ressource `scale` (chapitre 18). Un DaemonSet ne l'expose pas : il n'a pas de nombre de réplicas.
+Le HPA est à la fois un objet de l'API (groupe `autoscaling`, version stable `v2` ; la `v1` reste servie mais ne connaît que le CPU) et un contrôleur intégré au kube-controller-manager. Le contrôleur ne touche jamais aux pods : il écrit le nombre de réplicas souhaité dans la sous-ressource `scale` de sa cible, désignée par `spec.scaleTargetRef`. Toute ressource qui expose `/scale` peut donc être autoscalée : Deployment, ReplicaSet, StatefulSet, ReplicationController, et les ressources personnalisées dont la CRD déclare la sous-ressource `scale` (chapitre 18.5.4). Un DaemonSet ne l'expose pas : il n'a pas de nombre de réplicas.
 
 ```
      UNE ITÉRATION DU CONTRÔLEUR HPA (toutes les 15 s)
@@ -501,7 +501,7 @@ Le HPA et toi écrivez le même champ, `spec.replicas` de la cible. Plusieurs pi
 
 Un `kubectl -n boutique scale deployment api --replicas=1` est annulé à l'itération suivante : la cible passe sous `minReplicas`, et le HPA la remonte avec le motif « Current number of replicas below Spec.MinReplicas ». De même au-dessus de `maxReplicas`. Pour changer durablement l'échelle d'un service autoscalé, on modifie le HPA, pas la cible.
 
-Plus sournois : si le manifeste du Deployment contient `replicas: 2` et que tu le réappliques pendant que le HPA maintient 6 pods, `kubectl apply` remet 2, le HPA remonte à 6 quinze secondes plus tard, et le service oscille. La documentation recommande de **retirer `spec.replicas` du manifeste** d'une cible autoscalée. Attention à la manière : retirer le champ du fichier puis réappliquer en client-side apply supprime le champ de l'objet, qui reprend sa valeur par défaut, 1, le temps d'une itération du HPA. La procédure propre passe par `kubectl -n boutique apply edit-last-applied deployment/api` (supprimer `replicas` de l'annotation `last-applied-configuration`), puis seulement par la modification du fichier ; en server-side apply, on transfère la propriété du champ (chapitre 3).
+Plus sournois : si le manifeste du Deployment contient `replicas: 2` et que tu le réappliques pendant que le HPA maintient 6 pods, `kubectl apply` remet 2, le HPA remonte à 6 quinze secondes plus tard, et le service oscille. La documentation recommande de **retirer `spec.replicas` du manifeste** d'une cible autoscalée. Attention à la manière : retirer le champ du fichier puis réappliquer en client-side apply supprime le champ de l'objet, qui reprend sa valeur par défaut, 1, le temps d'une itération du HPA. La procédure propre passe par `kubectl -n boutique apply edit-last-applied deployment/api` (supprimer `replicas` de l'annotation `last-applied-configuration`), puis seulement par la modification du fichier ; en server-side apply, on transfère la propriété du champ (chapitre 3.8.2).
 
 Pendant un rolling update, le HPA continue de régler `spec.replicas` du Deployment, et le contrôleur de Deployment répartit ce nombre entre l'ancien et le nouveau ReplicaSet. Rien de particulier à faire. Sur un StatefulSet, le HPA agit de même, et les pods sont ajoutés ou retirés dans l'ordre des ordinaux.
 
@@ -540,7 +540,7 @@ Le mode se choisit dans `spec.updatePolicy.updateMode` :
 | `Off` | recommandations calculées et publiées, jamais appliquées | stable |
 | `Initial` | requests posées à la création des pods seulement | stable |
 | `Recreate` | pods évincés quand leurs requests s'écartent trop des recommandations, recréés avec les nouvelles valeurs | stable |
-| `InPlaceOrRecreate` | redimensionnement **en place** (sous-ressource `resize`, chapitre 4) quand c'est possible, éviction sinon | GA depuis VPA 1.6.0 (alpha 1.4.0, bêta 1.5.0) ; sa feature gate a disparu en 1.7.0 |
+| `InPlaceOrRecreate` | redimensionnement **en place** (sous-ressource `resize`, chapitre 4.12) quand c'est possible, éviction sinon | GA depuis VPA 1.6.0 (alpha 1.4.0, bêta 1.5.0) ; sa feature gate a disparu en 1.7.0 |
 | `InPlace` | redimensionnement en place uniquement, jamais d'éviction : en cas d'impossibilité, le VPA attend et réessaie | alpha depuis VPA 1.7.0, feature gate `InPlace` à activer sur l'updater et l'admission-controller |
 | `Auto` | alias de `Recreate` | déprécié depuis VPA 1.4.0 |
 
@@ -782,7 +782,7 @@ Crée dans `boutique` un Deployment temporaire `charge` (labels `app=charge` et 
 >
 > Huit boucles (4 par pod, 2 pods) envoient des requêtes en continu. agnhost répond vite, mais chaque requête lui coûte du CPU (traitement HTTP et ligne de journal) ; la consommation dépasse alors largement les 25m visés par pod. Le délai avant la première réaction est normal : jusqu'à 60 s pour la collecte suivante de metrics-server, puis jusqu'à 15 s pour l'itération du HPA. Une fois le seuil franchi, la montée se fait d'un bloc : la policy par défaut autorise `max(4, 100 % de 2) = 4` pods de plus en 15 s, soit exactement 6. Les nouveaux pods `api` démarrent prêts en quelques secondes (readiness sur `/hostname`) et la charge se répartit sur six pods. Sur le lab, `TARGETS` est passé de `2%` à `262%` 36 s après la création de `charge`, et `REPLICAS` de 2 à 6 quinze secondes plus tard ; à six réplicas, l'utilisation reste vers `175%` (80 à 100m par pod `api`). Rien ne limite `charge` à ce stade : chacun de ses deux pods consomme environ 2,5 cœurs de ton poste. Si `TARGETS` reste sous 55 % après trois minutes (machine hôte lente ou très rapide), augmente la charge avec `kubectl -n boutique scale deployment charge --replicas=4`.
 >
-> Si tu rejoues cet exercice après le [chapitre 8](08-ordonnancement-et-admission.md) (instantané I1 ou au-delà), la LimitRange `boutique-limites` donne au conteneur de `charge` la limite CPU par défaut de 200m : la même charge ne fait plus monter le HPA qu'à **4** réplicas. Il faut alors `kubectl -n boutique scale deployment charge --replicas=4`, ou des limites explicites dans `charge.yaml`. À partir de l'instantané I2, les NetworkPolicies du [chapitre 14](14-network-policies.md) bloquent en plus le trafic de `charge` vers `api` : seuls les pods `tier=web`, `app=outils` et les contrôleurs d'Ingress et de Gateway y ont accès.
+> Si tu rejoues cet exercice après le [chapitre 8](08-ordonnancement-et-admission.md) (instantané I1 ou au-delà), le LimitRange `boutique-limites` donne au conteneur de `charge` la limite CPU par défaut de 200m : la même charge ne fait plus monter le HPA qu'à **4** réplicas. Il faut alors `kubectl -n boutique scale deployment charge --replicas=4`, ou des limites explicites dans `charge.yaml`. À partir de l'instantané I2, les NetworkPolicies du [chapitre 14.11](14-network-policies.md) bloquent en plus le trafic de `charge` vers `api` : seuls les pods `tier=web`, `app=outils` et les contrôleurs d'Ingress et de Gateway y ont accès.
 >
 > Dans `describe`, `ScalingLimited` vaut `True` avec la raison `TooManyReplicas` (« the desired replica count is more than the maximum replica count ») tant que la proposition dépasse 6, et l'événement `SuccessfulRescale` indique « New size: 6; reason: cpu resource utilization (percentage of request) above target ». Une quatrième condition est apparue avec ce premier changement d'échelle, `ScaledToZero` à `False` (`NotScaledToZero`, « the HPA controller did not scale the workload to zero ») : elle ne concerne que la mise à zéro (7.10).
 >

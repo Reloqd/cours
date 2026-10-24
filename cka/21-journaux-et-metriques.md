@@ -13,7 +13,7 @@ Dépanner, c'est d'abord observer. Avant de corriger quoi que ce soit, tu dois s
 
 Un processus Linux reçoit trois descripteurs de fichier ouverts à son démarrage : 0 (l'entrée standard), 1 (la sortie standard, stdout) et 2 (la sortie d'erreur, stderr). Dans un conteneur, ce sont ces deux derniers flux, et eux seuls, que Kubernetes considère comme « les journaux du conteneur ». Le runtime (containerd, par l'intermédiaire de son processus `containerd-shim-runc-v2`) branche les descripteurs 1 et 2 du processus principal sur des tubes, lit tout ce qui y passe et l'écrit dans un fichier sur le disque du nœud. Une application qui écrit dans `/var/log/app.log` à l'intérieur de son conteneur, dans syslog ou dans un fichier de son volume, n'écrit donc **pas** dans ses journaux au sens de Kubernetes : `kubectl logs` ne montrera rien.
 
-C'est la raison pour laquelle les images officielles redirigent leurs fichiers de journalisation vers les flux standard. L'image `nginx` crée par exemple `/var/log/nginx/access.log` comme un lien vers `/dev/stdout` et `error.log` comme un lien vers `/dev/stderr`. Quand une application ne sait écrire que dans un fichier, on lui adjoint un conteneur annexe qui relit ce fichier et le recopie sur sa propre sortie standard (le sidecar natif du chapitre 4, `journal`, en est l'exemple du fil rouge).
+C'est la raison pour laquelle les images officielles redirigent leurs fichiers de journalisation vers les flux standard. L'image `nginx` crée par exemple `/var/log/nginx/access.log` comme un lien vers `/dev/stdout` et `error.log` comme un lien vers `/dev/stderr`. Quand une application ne sait écrire que dans un fichier, on lui adjoint un conteneur annexe qui relit ce fichier et le recopie sur sa propre sortie standard (le sidecar natif du chapitre 4.10, `journal`, en est l'exemple du fil rouge).
 
 ```
 Le trajet d'une ligne de journal
@@ -80,10 +80,10 @@ Le nom de fichier `<N>.log` est le compteur de redémarrages du conteneur au mom
 
 Le dossier `/var/log/containers` ne contient que des liens symboliques, recréés par le kubelet à chaque démarrage de conteneur, dont le nom rassemble pod, namespace, conteneur et identifiant du conteneur. Il existe pour les agents de collecte (Fluent Bit, Vector, Promtail…) : un simple motif `/var/log/containers/*.log` leur donne tous les journaux du nœud avec les métadonnées dans le nom.
 
-Pour un pod statique, l'UID qui figure dans le nom du dossier n'est pas tiré au hasard : le kubelet le calcule par un hachage du contenu du manifeste, du nom du nœud et de la source. **Modifier le manifeste change donc l'UID**, et les journaux du nouveau pod atterrissent dans un **nouveau dossier**. Sur le nœud control plane, cherche toujours avec un motif (`/var/log/pods/kube-system_kube-apiserver-cka_*`) et trie par date : le chapitre 23 s'en sert quand l'API ne répond plus.
+Pour un pod statique, l'UID qui figure dans le nom du dossier n'est pas tiré au hasard : le kubelet le calcule par un hachage du contenu du manifeste, du nom du nœud et de la source. **Modifier le manifeste change donc l'UID**, et les journaux du nouveau pod atterrissent dans un **nouveau dossier**. Sur le nœud control plane, cherche toujours avec un motif (`/var/log/pods/kube-system_kube-apiserver-cka_*`) et trie par date : le chapitre 23.4.3 s'en sert quand l'API ne répond plus.
 
 > [!info] minikube ≠ examen
-> Les chemins sont identiques sur un nœud kubeadm et dans les nœuds minikube : `/var/log/pods`, `/var/log/containers`, même format CRI. La seule différence est l'accès : `minikube -p cka ssh -n cka-m02` puis `sudo`, contre `ssh cka-m02` puis `sudo -i` à l'examen. Les fichiers appartiennent à root : sans `sudo`, `ls /var/log/pods/<dossier>` échoue.
+> Les chemins sont identiques sur un nœud kubeadm et dans les nœuds minikube : `/var/log/pods`, `/var/log/containers`, même format CRI. La seule différence est l'accès : `minikube -p cka ssh -n cka-m02` puis `sudo`, contre `ssh cka-m02` puis `sudo -i` à l'examen. Les fichiers appartiennent à root : sans `sudo`, `ls /var/log/pods/<dossier>` échoue. Pour la même raison, un motif comme `/var/log/pods/boutique_torrent_*` doit être développé par un shell root : `sudo sh -c 'ls /var/log/pods/boutique_torrent_*'`. Écrit `sudo ls /var/log/pods/boutique_torrent_*`, il est développé par ton shell, qui ne peut pas lire le dossier, et `ls` reçoit le motif tel quel (`No such file or directory`). En root (`sudo -i`), comme à l'examen, la question ne se pose pas.
 
 #### 21.2.3 La rotation
 
@@ -175,12 +175,14 @@ error: you are attempting to follow 6 log streams, but maximum allowed concurren
 
 Le compte porte sur les flux, c'est-à-dire pods × conteneurs avec `--all-containers`.
 
-**`TYPE/NOM`.** `kubectl logs deployment/api`, `job/migration`, `statefulset/redis`, `daemonset/agent-noeud` ou `service/front` résolvent l'objet en la liste de ses pods, puis en choisissent **un seul**, selon un ordre fixé dans le code de kubectl : un pod placé sur un nœud avant un pod non placé, puis `Running` avant `Unknown` avant `Pending`, puis prêt avant non prêt, puis prêt depuis le plus longtemps, puis le plus de redémarrages, puis le plus ancien.
+**`TYPE/NOM`.** `kubectl logs deployment/api`, `job/migration`, `statefulset/redis`, `daemonset/agent-noeud` ou `service/front` résolvent l'objet en la liste de ses pods, puis en choisissent **un seul**, selon un ordre fixé dans le code de kubectl : un pod placé sur un nœud avant un pod non placé, puis `Running` avant `Unknown` avant `Pending`, puis prêt avant non prêt, puis prêt depuis le plus longtemps, puis le plus de redémarrages, puis le plus ancien. kubectl annonce son choix sur la sortie d'erreur : `Found 3 pods, using pod/front-7c8466d9db-2ptgw`.
 
 > [!danger] Le piège de `deploy/…` pendant un rollout bloqué
 > Pendant une mise à jour qui échoue, les anciens pods sont `Running` et prêts, les nouveaux ne le sont pas. `kubectl logs deploy/api` choisit donc un **ancien** pod sain et t'affiche des journaux parfaitement normaux. Pour lire le pod qui casse, nomme-le (`kubectl get pods -l app=api` puis `kubectl logs <pod>`) ou passe `--all-pods`.
 
 **`--previous` et les redémarrages.** Quand un conteneur redémarre en boucle, l'instance courante vient souvent de démarrer et n'a encore rien écrit, ou elle est en attente (`CrashLoopBackOff`) et n'a pas de fichier courant. Le message utile est presque toujours dans l'instance précédente : `kubectl logs <pod> -p`. Pour un conteneur sorti à cause d'une erreur de configuration, la dernière ligne suffit souvent : `kubectl logs <pod> -p --tail=5`.
+
+Le cas inverse se rencontre aussi. Entre deux relances, le kubelet n'inscrit l'état d'attente `CrashLoopBackOff` qu'au moment où il resynchronise le pod ; d'ici là, le conteneur reste `terminated` et le pod s'affiche `Error`. Dans le lab, les deux affichages se rencontrent selon le pod et l'instant : `CrashLoopBackOff` pour `api` (panne 02) ou CoreDNS (panne 16), `Error` la plupart du temps pour le pod de l'exercice 21.2, `redis-0` (panne 10), kube-proxy (panne 17) ou un pod `front` privé de DNS. Pendant ce temps, l'instance « courante » est celle qui vient d'échouer, la seule terminée que le kubelet ait gardée, et `-p` désigne la précédente, déjà effacée : kubectl répond `unable to retrieve container logs for containerd://<id>` (avec un code de retour 0). Relance alors la commande **sans** `-p` : elle affiche le journal de l'instance qui vient d'échouer.
 
 #### 21.3.3 Un exemple complet sur le fil rouge
 
@@ -189,12 +191,13 @@ kubectl -n boutique logs deploy/front --tail=3 --timestamps
 ```
 
 ```
-2026-10-23T18:40:01.141298765Z 2026/10/23 18:40:01 [notice] 1#1: start worker processes
-2026-10-23T18:40:01.141887654Z 2026/10/23 18:40:01 [notice] 1#1: start worker process 30
-2026-10-23T18:40:01.142012345Z 2026/10/23 18:40:01 [notice] 1#1: start worker process 31
+Found 3 pods, using pod/front-7c8466d9db-2ptgw
+2026-10-24T05:48:10.117732534Z 10.244.142.64 - - [24/Oct/2026:05:48:10 +0000] "GET / HTTP/1.1" 200 27 "-" "kube-probe/1.37" "-"
+2026-10-24T05:48:20.118489367Z 10.244.142.64 - - [24/Oct/2026:05:48:20 +0000] "GET / HTTP/1.1" 200 27 "-" "kube-probe/1.37" "-"
+2026-10-24T05:48:30.117928031Z 10.244.142.64 - - [24/Oct/2026:05:48:30 +0000] "GET / HTTP/1.1" 200 27 "-" "kube-probe/1.37" "-"
 ```
 
-Les messages `[notice]` de nginx arrivent par stderr, les lignes du script d'entrée de l'image par stdout ; `kubectl logs` ne distingue pas les deux, seul le fichier CRI garde la trace du flux. Les requêtes des sondes de disponibilité de `front` apparaissent aussi dans ce journal, avec l'agent utilisateur `kube-probe/1.37` : un pod dont le journal ne montre plus aucun `kube-probe` n'est plus sondé, ou ses sondes n'arrivent plus jusqu'à lui.
+Sur un pod qui tourne depuis un moment, les dernières lignes sont les requêtes de la sonde de disponibilité de `front`, toutes les 10 secondes, avec l'agent utilisateur `kube-probe/1.37` : un pod dont le journal ne montre plus aucun `kube-probe` n'est plus sondé, ou ses sondes n'arrivent plus jusqu'à lui. Plus haut dans le journal, les messages `[notice]` de nginx sont arrivés par stderr, les lignes du script d'entrée de l'image et le journal d'accès par stdout ; `kubectl logs` ne distingue pas les deux, seul le fichier CRI garde la trace du flux.
 
 ### 21.4 Les journaux des composants
 
@@ -320,7 +323,7 @@ kubectl events -A --types=Warning                             # tout le cluster
 ```
 LAST SEEN   TYPE      REASON      OBJECT                       MESSAGE
 4m12s       Normal    Scheduled   Pod/bavard                   Successfully assigned boutique/bavard to cka-m02
-4m11s       Normal    Pulled      Pod/bavard                   Container image "busybox:1.37.0" already present on machine
+4m11s       Normal    Pulled      Pod/bavard                   Container image "busybox:1.37.0" already present on machine and can be accessed by the pod
 3m40s       Warning   BackOff     Pod/bavard                   Back-off restarting failed container fragile in pod bavard_boutique(8c2f…)
 ```
 
@@ -350,7 +353,7 @@ LAST SEEN   TYPE      REASON      OBJECT                       MESSAGE
 | `ProvisioningSucceeded`, `ProvisioningFailed`, `WaitForFirstConsumer` | contrôleurs de volumes | provisionnement d'un PV |
 
 > [!tip] Réflexe d'examen
-> Face à un objet qui « ne marche pas », la première commande est `kubectl -n <ns> events --for <type>/<nom>` ou un `describe`, la seconde `kubectl logs`. Un pod qui n'a jamais démarré n'a pas de journaux, mais il a toujours des événements, à condition qu'un composant ait essayé de faire quelque chose. L'absence totale d'événement est elle-même un indice : un pod `Pending` sans `FailedScheduling`, c'est un scheduler absent (chapitre 23).
+> Face à un objet qui « ne marche pas », la première commande est `kubectl -n <ns> events --for <type>/<nom>` ou un `describe`, la seconde `kubectl logs`. Un pod qui n'a jamais démarré n'a pas de journaux, mais il a toujours des événements, à condition qu'un composant ait essayé de faire quelque chose. L'absence totale d'événement est elle-même un indice : un pod `Pending` sans `FailedScheduling`, c'est un scheduler absent (chapitre 23.4.5).
 
 ### 21.6 Les métriques de ressources
 
@@ -427,7 +430,7 @@ Les erreurs courantes sont parlantes : `error: Metrics API not available` quand 
 
 ### 21.7 Le bilan d'un nœud : `kubectl describe node`
 
-`kubectl describe node cka-m02` assemble l'état d'un nœud en sections, dans cet ordre : labels, annotations et taints ; `Lease` (le bail de vie du kubelet, voir chapitre 23) ; `Conditions` ; `Addresses` ; `Capacity` et `Allocatable` ; `System Info` (versions du noyau, du runtime, du kubelet) ; `PodCIDR` ; `Non-terminated Pods` ; `Allocated resources` ; `Events`.
+`kubectl describe node cka-m02` assemble l'état d'un nœud en sections, dans cet ordre : labels, annotations et taints ; `Lease` (le bail de vie du kubelet, voir chapitre 23.2.1) ; `Conditions` ; `Addresses` ; `Capacity` et `Allocatable` ; `System Info` (versions du noyau, du runtime, du kubelet) ; `PodCIDR` ; `Non-terminated Pods` ; `Allocated resources` ; `Events`.
 
 ```
 Conditions:
@@ -440,17 +443,21 @@ Conditions:
   Ready                True    Fri, 23 Oct 2026 21:02:44 +0200   Fri, 23 Oct 2026 20:17:05 +0200   KubeletReady                 kubelet is posting ready status
 ```
 
-Les quatre conditions du kubelet (`MemoryPressure`, `DiskPressure`, `PIDPressure`, `Ready`) sont saines quand les trois premières valent `False` et la dernière `True`. `NetworkUnavailable` est posée par le CNI (ici Calico, raison `CalicoIsUp`). `LastHeartbeatTime` est la date du dernier calcul du kubelet ; `LastTransitionTime`, celle du dernier changement de valeur. Le chapitre 23 détaille ce que chaque combinaison signifie.
+Les quatre conditions du kubelet (`MemoryPressure`, `DiskPressure`, `PIDPressure`, `Ready`) sont saines quand les trois premières valent `False` et la dernière `True`. `NetworkUnavailable` est posée par le CNI (ici Calico, raison `CalicoIsUp`). `LastHeartbeatTime` est la date du dernier calcul du kubelet ; `LastTransitionTime`, celle du dernier changement de valeur. Le chapitre 23.2.2 détaille ce que chaque combinaison signifie.
 
 ```
 Capacity:
   cpu:                8
-  ephemeral-storage:  490048472Ki
+  ephemeral-storage:  501809635328
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
   memory:             32019572Ki
   pods:               110
 Allocatable:
   cpu:                8
-  ephemeral-storage:  490048472Ki
+  ephemeral-storage:  501809635328
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
   memory:             32019572Ki
   pods:               110
 …
@@ -470,7 +477,7 @@ Allocated resources:
 > [!info] minikube ≠ examen
 > Les trois nœuds du lab annoncent la même capacité, celle de l'hôte, et un `Allocatable` égal à la capacité (minikube ne réserve rien). Les pourcentages d'`Allocated resources` y sont donc faibles quel que soit le nombre de pods. Sur un nœud kubeadm d'examen, `Allocatable` est un peu inférieur à `Capacity` (au minimum le seuil d'éviction `memory.available` de 100 Mio).
 
-Pour un relevé synthétique de tous les nœuds, sans `describe`, une requête `custom-columns` suffit (chapitre 3) :
+Pour un relevé synthétique de tous les nœuds, sans `describe`, une requête `custom-columns` suffit (chapitre 3.5.3) :
 
 ```bash
 kubectl get nodes -o custom-columns='NOM:.metadata.name,CPU:.status.allocatable.cpu,MEMOIRE:.status.allocatable.memory,PRET:.status.conditions[?(@.type=="Ready")].status'
@@ -495,7 +502,9 @@ Piège 2 : kubectl logs deploy/… pendant un rollout en échec
 Piège 3 : Oublier --previous sur un conteneur qui redémarre
 ═══════════════════════════════════════════════════════════
   SYMPTÔME : journal vide, ou « is waiting to start: CrashLoopBackOff ».
-  BON      : kubectl logs <pod> -p  — la cause est dans l'instance précédente.
+  BON      : kubectl logs <pod> -p  — la cause est dans l'instance précédente
+             (si -p répond « unable to retrieve container logs », le pod
+             est affiché Error : relancer sans -p, 21.3.2).
 
 Piège 4 : Croire que kubectl logs remonte au démarrage du conteneur
 ═══════════════════════════════════════════════════════════════════
@@ -565,7 +574,7 @@ Dans le namespace `boutique`, choisis le pod `front` le plus ancien. Sans utilis
 > 2026-10-23T19:12:31.204518873Z stdout F … - - [23/Oct/2026:19:12:31 +0000] "GET / HTTP/1.1" 200 … "-" "kube-probe/1.37" "-"
 > ```
 >
-> La sonde de disponibilité de `front` interroge `/` toutes les 10 secondes : les dernières lignes sont presque toujours ses requêtes, écrites par nginx sur stdout (le journal d'accès de l'image est un lien vers `/dev/stdout`). Les messages de démarrage de nginx, plus haut dans le fichier, sont marqués `stderr`. Le lien de `/var/log/containers` porte le nom `<pod>_boutique_nginx-<id>.log` et pointe vers ce même fichier.
+> La sonde de disponibilité de `front` interroge `/` toutes les 10 secondes : les dernières lignes sont presque toujours ses requêtes, écrites par nginx sur stdout (le journal d'accès de l'image est un lien vers `/dev/stdout`). Les messages de démarrage de nginx, plus haut dans le fichier, sont marqués `stderr`. Le lien de `/var/log/containers` porte le nom `<pod>_boutique_nginx-<id>.log` et pointe vers ce même fichier. Si le conteneur a déjà redémarré (après un `minikube -p cka stop` puis `start`, par exemple), le `grep` ramène deux liens : celui de l'instance courante, vers `<N>.log`, et celui de l'instance précédente, vers `<N-1>.log`, que le kubelet garde pour `--previous`.
 >
 > **Vérification** : `minikube -p cka ssh -n $NOEUD -- sudo test -f "$(cat ~/cka/journaux/chemin-front.txt)" && echo présent` affiche `présent`.
 
@@ -613,7 +622,9 @@ spec:
 > fragile: erreur fatale
 > ```
 >
-> Les ressources du pod ne sont pas déclarées : la LimitRange `boutique-limites` du chapitre 8 leur donne leurs valeurs par défaut, ce qui satisfait aussi le quota. Le pod respecte le niveau `baseline` de Pod Security ; l'avertissement `would violate PodSecurity "restricted:latest"` affiché à la création vient du label `warn=restricted` du namespace et n'empêche rien.
+> Ce résultat n'apparaît que si `fragile` est en train de tourner au moment de la commande (15 secondes par cycle). Le reste du temps, `bavard` s'affiche `Error` (`1/2`) : `fragile` attend sa relance, son instance courante est celle qui vient d'échouer, et le kubelet a déjà effacé la précédente. `-p` répond alors `unable to retrieve container logs for containerd://<id>` (21.3.2), et c'est `kubectl -n boutique logs bavard -c fragile`, **sans** `-p`, qui affiche les deux lignes.
+>
+> Les ressources du pod ne sont pas déclarées : le LimitRange `boutique-limites` du chapitre 8 leur donne leurs valeurs par défaut, ce qui satisfait aussi le quota. Le pod respecte le niveau `baseline` de Pod Security ; l'avertissement `would violate PodSecurity "restricted:latest"` affiché à la création vient du label `warn=restricted` du namespace et n'empêche rien.
 >
 > **Vérification** : `kubectl -n boutique get pod bavard -o jsonpath='{.status.containerStatuses[?(@.name=="fragile")].lastState.terminated.exitCode}'` affiche `3`.
 
@@ -633,10 +644,10 @@ Affiche, triés par date, les seuls événements `Warning` du namespace `boutiqu
 > kubectl -n default events --for node/cka-m02
 > kubectl events -A --types=Warning | grep -i node
 > minikube -p cka ssh -- sudo grep -c event-ttl /etc/kubernetes/manifests/kube-apiserver.yaml
-> kubectl -n boutique delete pod bavard
+> kubectl -n boutique delete pod bavard --now
 > ```
 >
-> Le fichier contient au moins `BackOff`, `Created`, `Pulled`, `Scheduled` et `Started` (et `Killing` si un conteneur a été tué). `BackOff` porte le message `Back-off restarting failed container fragile in pod bavard_boutique(…)`. Les événements des nœuds sont dans le namespace `default`, pas dans `boutique`. Le `grep -c` renvoie `0` : l'option `--event-ttl` n'est pas posée, la valeur par défaut d'une heure s'applique.
+> Le fichier contient au moins `BackOff`, `Created`, `Pulled`, `Scheduled` et `Started` (et `Killing` si un conteneur a été tué). `BackOff` porte le message `Back-off restarting failed container fragile in pod bavard_boutique(…)`. Les événements des nœuds sont dans le namespace `default`, pas dans `boutique`. Le `grep -c` renvoie `0`, suivi de `ssh: Process exited with status 1` (code de `grep` quand il ne trouve rien, relayé par minikube) : l'option `--event-ttl` n'est pas posée, la valeur par défaut d'une heure s'applique. `--now` évite d'attendre 30 secondes : la boucle `sh` de `compteur`, en PID 1, ignore SIGTERM.
 >
 > **Vérification** : `grep -c . ~/cka/journaux/raisons-bavard.txt` affiche un nombre supérieur ou égal à 5, et `kubectl -n boutique get pod bavard` répond `NotFound`.
 
@@ -679,7 +690,7 @@ Sur le nœud `cka-m02` : affiche les 20 dernières lignes du journal du kubelet 
 > kubectl -n kube-system logs $(kubectl -n kube-system get pods -l k8s-app=calico-node --field-selector spec.nodeName=cka-m02 -o name) -c calico-node --tail=5
 > ```
 >
-> Le motif `' E[0-9]\{4\} '` repère l'en-tête klog d'une erreur (`E1023 …`) derrière le préfixe de journald. `systemctl cat` montre l'unité et son drop-in `10-kubeadm.conf` ; la ligne `ExecStart=/var/lib/minikube/binaries/v1.37.0/kubelet --bootstrap-kubeconfig=… --config=/var/lib/kubelet/config.yaml --hostname-override=cka-m02 --kubeconfig=/etc/kubernetes/kubelet.conf --node-ip=192.168.49.3` contient toutes les options en dur (sur un nœud kubeadm, elles viendraient de variables lues dans `/var/lib/kubelet/kubeadm-flags.env`). Les deux lectures du journal de `calico-node` donnent les mêmes lignes : `crictl logs` lit le même fichier que le kubelet, sans passer par l'API.
+> Le motif `' E[0-9]\{4\} '` repère l'en-tête klog d'une erreur (`E1023 …`) derrière le préfixe de journald. `systemctl cat` montre l'unité et son drop-in `10-kubeadm.conf`, et le `grep` ramène deux lignes : celle de l'unité, `ExecStart=/var/lib/minikube/binaries/v1.37.0/kubelet` sans option, que le drop-in annule par un `ExecStart=` vide, puis celle du drop-in, `ExecStart=/var/lib/minikube/binaries/v1.37.0/kubelet --bootstrap-kubeconfig=… --config=/var/lib/kubelet/config.yaml --hostname-override=cka-m02 --kubeconfig=/etc/kubernetes/kubelet.conf --node-ip=192.168.49.3`, qui contient toutes les options en dur (sur un nœud kubeadm, elles viendraient de variables lues dans `/var/lib/kubelet/kubeadm-flags.env`). Les deux lectures du journal de `calico-node` donnent les mêmes lignes : `crictl logs` lit le même fichier que le kubelet, sans passer par l'API.
 >
 > **Vérification** : `minikube -p cka ssh -n cka-m02 -- systemctl is-active kubelet` affiche `active`.
 
@@ -695,24 +706,26 @@ Crée dans `boutique` le pod `torrent` (busybox 1.37.0, labels `app=torrent` et 
 >   --command -- sh -c 'while true; do echo "torrent: une ligne de journal volontairement longue pour remplir vite le fichier courant"; done'
 > sleep 60
 > NOEUD=$(kubectl -n boutique get pod torrent -o jsonpath='{.spec.nodeName}')
-> minikube -p cka ssh -n $NOEUD -- 'sudo ls -l /var/log/pods/boutique_torrent_*/torrent/'
+> minikube -p cka ssh -n $NOEUD -- 'sudo sh -c "ls -l /var/log/pods/boutique_torrent_*/torrent/"'
 > kubectl -n boutique logs torrent | wc -c
-> minikube -p cka ssh -n $NOEUD -- 'sudo du -cb /var/log/pods/boutique_torrent_*/torrent/* | tail -1'
+> minikube -p cka ssh -n $NOEUD -- 'sudo sh -c "du -cb /var/log/pods/boutique_torrent_*/torrent/*" | tail -1'
 > kubectl -n boutique delete pod torrent --grace-period=0
-> minikube -p cka ssh -n $NOEUD -- 'sudo ls -d /var/log/pods/boutique_torrent_* 2>&1'
+> sleep 60
+> minikube -p cka ssh -n $NOEUD -- 'sudo sh -c "ls -d /var/log/pods/boutique_torrent_*" 2>&1'
 > ```
 >
-> `kubectl run` sans `--restart` crée un pod nu ; `--command --` remplace la commande de l'image. La LimitRange du namespace plafonne le conteneur à 200m de CPU, ce qui ralentit la boucle sans l'empêcher de produire plusieurs mégaoctets par seconde. La liste ressemble à :
+> `kubectl run` sans `--restart` crée un pod nu ; `--command --` remplace la commande de l'image. Le motif `boutique_torrent_*` est développé par `sudo sh -c` : le shell de l'utilisateur `docker` ne peut pas lire `/var/log/pods` (21.2.2). La LimitRange du namespace plafonne le conteneur à 200m de CPU, ce qui ralentit la boucle sans l'empêcher de produire une vingtaine de mégaoctets par seconde. La liste ressemble à :
 >
 > ```
-> -rw-r----- 1 root root  6815744 Oct 23 19:42 0.log
-> -rw-r----- 1 root root 11010048 Oct 23 19:42 0.log.20261023-194215
-> -rw-r----- 1 root root   917504 Oct 23 19:42 0.log.20261023-194203.gz
-> -rw-r----- 1 root root   921088 Oct 23 19:42 0.log.20261023-194151.gz
-> -rw-r----- 1 root root   915712 Oct 23 19:41 0.log.20261023-194139.gz
+> total 354980
+> -rw-r----- 1 root root 121950025 Oct 24 05:54 0.log
+> -rw-r----- 1 root root   7390295 Oct 24 05:54 0.log.20261024-055404.gz
+> -rw-r----- 1 root root   7010933 Oct 24 05:54 0.log.20261024-055414.gz
+> -rw-r----- 1 root root   7320006 Oct 24 05:54 0.log.20261024-055424.gz
+> -rw-r----- 1 root root 219817812 Oct 24 05:54 0.log.20261024-055434
 > ```
 >
-> Cinq fichiers au plus : le courant, le dernier tourné en clair (qui peut dépasser 10 Mio, la taille n'étant vérifiée que toutes les 10 secondes), et des archives gzip une dizaine de fois plus petites (le message se répète, mais chaque ligne porte un horodatage différent). `kubectl logs | wc -c` renvoie moins que le seul `0.log` (le préfixe CRI est retiré) et beaucoup moins que la somme : seul le fichier courant est lu. Après la suppression, le kubelet efface le dossier du pod.
+> Cinq fichiers au plus : le courant, le dernier tourné en clair, et des archives gzip une trentaine de fois plus petites (le message se répète, mais chaque ligne porte un horodatage différent). Les horodatages des noms montrent une rotation toutes les 10 secondes, à chaque passage du kubelet : à ce débit, le fichier dépasse largement les 10 Mio entre deux vérifications (plus de 200 Mo ici), ce qui illustre que `containerLogMaxSize` est un seuil de déclenchement et non une limite. `kubectl logs | wc -c` renvoie à peu près la taille du seul fichier courant (le préfixe CRI est retiré, mais le fichier a grossi entre les deux commandes) et beaucoup moins que la somme : seul le fichier courant est lu. Après la suppression, le kubelet efface le dossier du pod à son passage suivant de nettoyage, au bout de 40 secondes environ (une minute au plus), d'où le `sleep 60`.
 >
 > **Vérification** : la dernière commande répond `No such file or directory`.
 
@@ -735,8 +748,8 @@ Sans te connecter au nœud, liste le contenu de `/var/log` de `cka-m02` par l'AP
 > minikube -p cka ssh -n cka-m02 -- 'sudo cp /root/config.yaml.orig /var/lib/kubelet/config.yaml && sudo systemctl restart kubelet'
 > ```
 >
-> La première requête fonctionne sans rien changer : `enableSystemLogHandler` vaut `true` par défaut et le kubelet sert `/var/log` en liste HTML (`containers/`, `pods/`, `journal/`…). La requête `?query=kubelet` exige en plus `enableSystemLogQuery: true` ; sans lui, le paramètre est ignoré ou refusé. Le champ est ajouté en fin de fichier, au premier niveau du document `KubeletConfiguration`. La sauvegarde est faite hors de tout dossier surveillé et la configuration d'origine est restaurée à la fin : le chapitre 23 apprend à diagnostiquer un kubelet dont la configuration est fausse.
+> La première requête fonctionne sans rien changer : `enableSystemLogHandler` vaut `true` par défaut et le kubelet sert `/var/log` en liste HTML (dans un nœud du lab : `alternatives.log`, `calico/`, `containers/`, `pods/`). La requête `?query=kubelet` exige en plus `enableSystemLogQuery: true` ; sans lui, le paramètre est ignoré et la réponse est de nouveau la liste de `/var/log`. Une fois le champ posé, elle renvoie les lignes du journal du kubelet au format de journald (`Oct 24 05:57:27.092419 cka-m02 kubelet[19284]: I1024 …`). Le champ est ajouté en fin de fichier, au premier niveau du document `KubeletConfiguration`. La sauvegarde est faite hors de tout dossier surveillé et la configuration d'origine est restaurée à la fin : le chapitre 23.2.3 apprend à diagnostiquer un kubelet dont la configuration est fausse.
 >
-> **Vérification** : `minikube -p cka ssh -n cka-m02 -- sudo grep -c enableSystemLogQuery /var/lib/kubelet/config.yaml` affiche `0` et `kubectl get node cka-m02` montre `Ready`.
+> **Vérification** : `minikube -p cka ssh -n cka-m02 -- sudo grep -c enableSystemLogQuery /var/lib/kubelet/config.yaml` affiche `0` (suivi de `ssh: Process exited with status 1`, le code de `grep` sans correspondance) et `kubectl get node cka-m02` montre `Ready`.
 
 ---

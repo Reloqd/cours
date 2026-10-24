@@ -45,7 +45,7 @@ EOF
 | Copier / coller dans le terminal | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
 
 > [!info] minikube ≠ examen
-> Dans le lab, on entre dans un nœud par `minikube -p cka ssh -n cka-m02` (utilisateur `docker`, `sudo` sans mot de passe). À l'examen, c'est `ssh <nœud>` puis `sudo -i`. Le lab n'a pas l'alias `k` : le chapitre 3 le pose.
+> Dans le lab, on entre dans un nœud par `minikube -p cka ssh -n cka-m02` (utilisateur `docker`, `sudo` sans mot de passe). À l'examen, c'est `ssh <nœud>` puis `sudo -i`. Le lab n'a pas l'alias `k` : le chapitre 3.10.1 le pose.
 
 ### A.2 kubectl au quotidien
 
@@ -941,22 +941,23 @@ rules:
     port: 8080
 ```
 
-ReferenceGrant, posé dans le namespace **cible**, pour qu'une route de `vitrine` vise un Service de `boutique` :
+ReferenceGrant, posé dans le namespace **cible**, pour qu'une route de `boutique` vise le Service `vitrine` du namespace `vitrine` (exercice 13.6) :
 
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1beta1  # version stockée ; v1 aussi servie depuis Gateway API v1.5
+apiVersion: gateway.networking.k8s.io/v1        # servie depuis Gateway API v1.5 ; stockée en v1beta1 (13.12)
 kind: ReferenceGrant
 metadata:
-  name: vitrine-vers-boutique
-  namespace: boutique
+  name: boutique-vers-vitrine
+  namespace: vitrine
 spec:
   from:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
-    namespace: vitrine
+    namespace: boutique
   to:
   - group: ""
     kind: Service
+    name: vitrine                                 # sans name : tous les Services du namespace
 ```
 
 ```bash
@@ -1265,7 +1266,7 @@ helm history vitrine -n demo
 helm rollback vitrine 1 -n demo                     # crée une NOUVELLE révision
 helm get values vitrine -n demo                     # valeurs fournies ; --all pour toutes
 helm template vitrine podinfo/podinfo --version 6.15.0 --set replicaCount=2 > rendu.yaml
-helm install vitrine oci://ghcr.io/stefanprodan/charts/podinfo --version 6.15.0 -n demo   # variante OCI
+helm install vitrine-oci oci://ghcr.io/stefanprodan/charts/podinfo --version 6.15.0 -n demo   # variante OCI, autre nom (vitrine existe)
 helm list -A
 helm uninstall vitrine -n demo
 ```
@@ -1505,15 +1506,16 @@ kubectl describe node cka-m02 | grep -A8 'Allocated resources'
 | `Pending` **sans** événement | scheduler absent ou cassé | `kubectl -n kube-system get pods`, manifeste du scheduler |
 | `ErrImagePull`, `ImagePullBackOff` | image ou étiquette fausse, registre privé | événements, `imagePullSecrets` |
 | `CreateContainerConfigError` | ConfigMap, Secret ou clé absents | événements |
-| `CrashLoopBackOff` | processus qui sort, liveness trop sévère | `kubectl logs -p`, `lastState.terminated` |
+| `CrashLoopBackOff` (ou `Error` entre deux relances) | processus qui sort, liveness trop sévère | `kubectl logs -p` (sans `-p` s'il répond `unable to retrieve container logs`), `lastState.terminated` |
 | `OOMKilled` (raison du dernier arrêt) | limite mémoire dépassée | `kubectl get pod -o yaml`, code 137 |
 | `Running` mais `0/1` | readiness en échec | `kubectl describe pod`, EndpointSlices vides |
 | `Terminating` sans fin | finalizer, nœud injoignable | `metadata.finalizers`, état du nœud |
 | ReplicaSet sans pod | quota, admission (PSA), webhook | `kubectl describe rs`, événements `FailedCreate` |
 
 ```bash
-kubectl debug -it pod/api-<hash> -n boutique --image=nicolaka/netshoot:v0.16 --target=agnhost  # éphémère
-kubectl debug pod/api-<hash> -n boutique -it --copy-to=api-debug --image=busybox:1.37.0 --share-processes
+kubectl debug -it pod/api-<hash> -n boutique --image=nicolaka/netshoot:v0.16 --target=agnhost --profile=baseline  # éphémère
+kubectl debug pod/api-<hash> -n boutique -it --copy-to=api-debug --image=busybox:1.37.0 --share-processes --profile=baseline
+# boutique est en enforce=baseline : sans --profile=baseline, le profil general (SYS_PTRACE) est refusé (22.5.2)
 kubectl debug node/cka-m02 -it --image=busybox:1.37.0     # racine du nœud en /host ; chroot /host
 kubectl delete pod node-debugger-cka-m02-<suffixe>        # le pod de debug de nœud reste : à supprimer
 ```
@@ -1528,7 +1530,8 @@ kubectl get --raw='/readyz?verbose'                    # contrôles de santé de
 sudo systemctl status kubelet ; sudo journalctl -u kubelet -n 50 --no-pager
 sudo systemctl status containerd
 sudo crictl ps -a | grep -E 'kube|etcd'
-sudo ls /var/log/pods/ ; sudo tail -n 30 /var/log/pods/kube-system_kube-apiserver-*/kube-apiserver/*.log
+sudo ls /var/log/pods/ ; sudo sh -c 'tail -n 30 /var/log/pods/kube-system_kube-apiserver-*/kube-apiserver/*.log'
+# motif développé par root (sh -c) : le shell de l'utilisateur ne lit pas /var/log/pods (21.2.2)
 sudo cat /var/lib/kubelet/config.yaml
 ```
 
@@ -1544,14 +1547,14 @@ Chapitres [2](02-architecture.md), [19](19-kubeadm-installation-ha-et-mises-a-jo
 | Port de l'API | 6443 | **8443** (`control-plane.minikube.internal:8443`) |
 | Manifestes statiques | `/etc/kubernetes/manifests/` | identique |
 | Certificats | `/etc/kubernetes/pki/` (etcd : `pki/etcd/`) | **`/var/lib/minikube/certs/`** (etcd : `certs/etcd/`) |
-| Données etcd | `/var/lib/etcd` | **`/var/lib/minikube/etcd`** |
+| Données etcd | `/var/lib/etcd` | **`/var/lib/minikube/etcd`** ; `/var/lib/minikube/etcd-restore` après l'exercice 20.5 (`lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`) |
 | Kubeconfigs | `/etc/kubernetes/{admin,super-admin,controller-manager,scheduler,kubelet}.conf` | identique |
 | Config du kubelet | `/var/lib/kubelet/config.yaml` | identique (`staticPodPath`, `cgroupDriver: systemd`, `clusterDNS: [10.96.0.10]`) |
 | Unité du kubelet | drop-in `10-kubeadm.conf` qui lit `/var/lib/kubelet/kubeadm-flags.env` | options **en dur** dans `ExecStart` ; `kubeadm-flags.env` ignoré |
 | Binaires kubeadm, kubelet, kubectl | `/usr/bin/` | **`/var/lib/minikube/binaries/v1.37.0/`**, hors PATH |
 | Config kubeadm | ConfigMap `kube-system/kubeadm-config` | aussi `/var/tmp/minikube/kubeadm.yaml` |
 | `kubeadm certs check-expiration` | sans option | `--config /var/tmp/minikube/kubeadm.yaml` ou `--cert-dir /var/lib/minikube/certs` |
-| etcdctl / etcdutl | sur le nœud | à installer (chapitre 20), présents seulement dans l'image etcd |
+| etcdctl / etcdutl | sur le nœud | à installer (chapitre 20.3.3), présents seulement dans l'image etcd |
 | Taint du control plane | `node-role.kubernetes.io/control-plane:NoSchedule` | **aucune** |
 | CoreDNS | 2 réplicas | 1 réplica |
 | Élection de leader (scheduler, controller-manager) | activée | `--leader-elect=false` |
@@ -1582,7 +1585,7 @@ Chapitres [2](02-architecture.md), [19](19-kubeadm-installation-ha-et-mises-a-jo
 
 ### A.9 jsonpath et sorties utiles
 
-Chapitre [3](03-kubectl-efficace.md). Les chaînes littérales se placent entre guillemets doubles dans l'expression, l'expression entière entre apostrophes.
+Chapitre [3.5](03-kubectl-efficace.md). Les chaînes littérales se placent entre guillemets doubles dans l'expression, l'expression entière entre apostrophes.
 
 ```bash
 # Nom et InternalIP de chaque nœud, triés
@@ -1617,7 +1620,7 @@ kubectl get deploy front -o yaml | less                   # -o kyaml (GA 1.37) p
 
 #### A.10.1 Sauvegarder et restaurer etcd
 
-Chapitre [20](20-etcd-sauvegarde-et-restauration.md). Sur le control plane, en root.
+Chapitre [20.8](20-etcd-sauvegarde-et-restauration.md). Sur le control plane, en root.
 
 ```bash
 # 1. Sauvegarde (etcdctl), puis contrôle (etcdutl)
@@ -1644,11 +1647,11 @@ kubectl get pods -A
 `--bump-revision` et `--mark-compacted` (obligatoire dès que `--bump-revision` est non nul) évitent que le cache de watch de l'apiserver serve des objets postérieurs à la sauvegarde. Sans ces options, redémarre kube-apiserver, kube-controller-manager et kube-scheduler (`crictl stop` sur leurs conteneurs) après la restauration.
 
 > [!info] minikube ≠ examen
-> Dans le lab : `minikube -p cka ssh`, puis les mêmes commandes avec `sudo`, les certificats sous `/var/lib/minikube/certs/etcd/`, les données sous `/var/lib/minikube/etcd`, la sauvegarde dans `/var/lib/minikube/backup/` et la restauration dans `/var/lib/minikube/etcd-restore`. etcdctl et etcdutl ne sont pas installés d'origine : le chapitre 20 les pose dans `/usr/local/bin` à partir de l'archive officielle v3.7.0.
+> Dans le lab : `minikube -p cka ssh`, puis les mêmes commandes avec `sudo`, les certificats sous `/var/lib/minikube/certs/etcd/`, les données sous `/var/lib/minikube/etcd` (sous `/var/lib/minikube/etcd-restore` si tu as fait l'exercice 20.5 ; `lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`), la sauvegarde dans `/var/lib/minikube/backup/` et la restauration dans `/var/lib/minikube/etcd-restore`. etcdctl et etcdutl ne sont pas installés d'origine : le chapitre 20.3.3 les pose dans `/usr/local/bin` à partir de l'archive officielle v3.7.0.
 
 #### A.10.2 Mettre à jour un cluster kubeadm (1.36 → 1.37)
 
-Chapitre [19](19-kubeadm-installation-ha-et-mises-a-jour.md).
+Chapitre [19.6](19-kubeadm-installation-ha-et-mises-a-jour.md).
 
 ```bash
 # Sur chaque nœud : dépôt de la mineure cible
@@ -1673,7 +1676,7 @@ kubectl uncordon cp1
 
 #### A.10.3 Créer un utilisateur par CSR
 
-Chapitre [16](16-rbac-et-authentification.md).
+Chapitre [16.3](16-rbac-et-authentification.md).
 
 ```bash
 cd ~/cka/rbac
@@ -1699,7 +1702,7 @@ kubectl --context=alice@cka auth whoami
 
 #### A.10.4 Drainer un nœud
 
-Chapitre [8](08-ordonnancement-et-admission.md).
+Chapitre [8.14](08-ordonnancement-et-admission.md).
 
 ```bash
 kubectl drain cka-m02 --ignore-daemonsets --delete-emptydir-data   # --force pour les pods sans contrôleur
@@ -1713,7 +1716,7 @@ kubectl uncordon cka-m02
 
 #### A.10.5 Réparer un pod statique du control plane
 
-Chapitre [23](23-depanner-le-cluster.md).
+Chapitre [23.4](23-depanner-le-cluster.md).
 
 ```bash
 ssh <control-plane> ; sudo -i                          # lab : minikube -p cka ssh, puis sudo
@@ -1733,7 +1736,7 @@ kubectl -n kube-system get pod kube-scheduler-<nœud>
 
 #### A.10.6 Ramener un nœud NotReady
 
-Chapitre [23](23-depanner-le-cluster.md).
+Chapitre [23.2](23-depanner-le-cluster.md).
 
 ```bash
 kubectl describe node cka-m02 | grep -A10 Conditions       # « Kubelet stopped posting node status » ?

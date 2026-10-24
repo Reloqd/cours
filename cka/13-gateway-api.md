@@ -136,7 +136,7 @@ CE QUE FAIT ENVOY GATEWAY D'UN GATEWAY
   status.addresses[0].value du Gateway
 ```
 
-Chaque Gateway reçoit **son propre** proxy Envoy, un Deployment et un Service de type LoadBalancer dans `envoy-gateway-system`. Leurs labels `gateway.envoyproxy.io/owning-gateway-name` et `gateway.envoyproxy.io/owning-gateway-namespace` permettent de les retrouver. Envoy Gateway décale les ports privilégiés de 10 000 dans le conteneur (80 devient 10080, 443 devient 10443) pour que le proxy tourne sans la capacité `CAP_NET_BIND_SERVICE` ; le Service, lui, expose bien 80 et 443. Dans le lab, c'est MetalLB (chapitre 10) qui donne une adresse à ce Service ; sans fournisseur de LoadBalancer, le Gateway resterait `Programmed=False` (13.11).
+Chaque Gateway reçoit **son propre** proxy Envoy, un Deployment et un Service de type LoadBalancer dans `envoy-gateway-system`. Leurs labels `gateway.envoyproxy.io/owning-gateway-name` et `gateway.envoyproxy.io/owning-gateway-namespace` permettent de les retrouver. Envoy Gateway décale les ports privilégiés de 10 000 dans le conteneur (80 devient 10080, 443 devient 10443) pour que le proxy tourne sans la capacité `CAP_NET_BIND_SERVICE` ; le Service, lui, expose bien 80 et 443. Dans le lab, c'est MetalLB (chapitre 10.8) qui donne une adresse à ce Service ; sans fournisseur de LoadBalancer, le Gateway resterait `Programmed=False` (13.11).
 
 > [!info] minikube ≠ examen
 > Le lab installe lui-même les CRD (par le chart d'Envoy Gateway, canal Experimental v1.6.1) et le contrôleur. Le programme demande de **savoir utiliser** la Gateway API, pas d'installer une implémentation donnée : sur un cluster d'examen, commence par `kubectl get gatewayclass` et `kubectl api-resources --api-group=gateway.networking.k8s.io` pour savoir ce qui est disponible. Les objets que tu écris (Gateway, HTTPRoute, ReferenceGrant) sont standard et indépendants de l'implémentation. Note aussi que la matrice de compatibilité publiée par Envoy Gateway liste la v1.9 comme testée sur Kubernetes 1.33 à 1.36 ; elle fonctionne sur le lab en 1.37.0, ce que le relevé du lab a vérifié, mais la 1.37 n'y figure pas officiellement.
@@ -201,7 +201,7 @@ status
 
 Les règles de validation sont écrites en CEL dans les CRD, et le serveur d'API refuse un Gateway qui les enfreint, avec le message exact : `tls` interdit pour les protocoles HTTP, TCP et UDP (« tls must not be specified for protocols ['HTTP', 'TCP', 'UDP'] ») ; mode `Terminate` obligatoire pour HTTPS ; `mode` obligatoire pour TLS ; pas de `hostname` pour TCP et UDP ; noms de listeners uniques ; combinaison port, protocole et hostname unique ; et en mode `Terminate`, au moins un `certificateRefs` ou des `options`.
 
-Le Secret de `certificateRefs` est un Secret `kubernetes.io/tls` ordinaire, le même qu'au chapitre 12 : `boutique-tls` sert tel quel. Par défaut, il est cherché dans le namespace du Gateway ; un Secret d'un autre namespace exige un ReferenceGrant (13.12).
+Le Secret de `certificateRefs` est un Secret `kubernetes.io/tls` ordinaire, le même qu'au chapitre 12.8 : `boutique-tls` sert tel quel. Par défaut, il est cherché dans le namespace du Gateway ; un Secret d'un autre namespace exige un ReferenceGrant (13.12).
 
 `allowedRoutes.namespaces.from` vaut `Same` par défaut : seules les routes du namespace du Gateway peuvent s'y attacher. `All` ouvre à tous les namespaces, `Selector` à ceux dont les labels correspondent à `selector`. C'est l'opérateur qui décide qui peut publier sur son point d'entrée.
 
@@ -455,7 +455,7 @@ La correspondance entre les deux API est directe pour tout ce qui est standard :
 | annotation de canari, de poids | `backendRefs[].weight` |
 | annotations sans équivalent | extensions de l'implémentation (politiques, `ExtensionRef`) |
 
-Le projet fournit l'outil **ingress2gateway** (v1.0 le 20 mars 2026, v1.2.0 le 7 juillet 2026), qui lit des Ingress, depuis le cluster ou depuis des fichiers, et imprime les objets Gateway API équivalents. Il ne crée rien : il écrit sur la sortie standard. Voici sa sortie réelle (v1.2.0) pour l'Ingress `boutique` du chapitre 12 :
+Le projet fournit l'outil **ingress2gateway** (v1.0 le 20 mars 2026, v1.2.0 le 7 juillet 2026), qui lit des Ingress, depuis le cluster ou depuis des fichiers, et imprime les objets Gateway API équivalents. Il ne crée rien : il écrit sur la sortie standard. Voici sa sortie réelle (v1.2.0) pour l'Ingress `boutique` du chapitre 12.12 :
 
 ```bash
 kubectl -n boutique get ingress boutique -o yaml > ingress-boutique-live.yaml
@@ -625,7 +625,7 @@ NAME          CLASS   ADDRESS          PROGRAMMED   AGE
 boutique-gw   eg      192.168.49.101   True         45s
 ```
 
-L'adresse vient de MetalLB : 192.168.49.100 est déjà prise par `front-lb` (chapitre 10), le proxy du Gateway reçoit donc en général la suivante. Ne l'écris jamais en dur : lis-la dans le statut, comme le font tous les tests de ce chapitre.
+L'adresse vient de MetalLB : 192.168.49.100 est déjà prise par `front-lb` (chapitre 10.8), le proxy du Gateway reçoit donc en général la suivante. Ne l'écris jamais en dur : lis-la dans le statut, comme le font tous les tests de ce chapitre.
 
 ```bash
 GW=$(kubectl -n boutique get gateway boutique-gw -o jsonpath='{.status.addresses[0].value}')

@@ -11,7 +11,7 @@ Par défaut, le réseau d'un cluster Kubernetes est plat et ouvert : n'importe q
 
 ### 14.1 Le modèle : ouvert par défaut, liste d'autorisations
 
-Le modèle réseau de Kubernetes (chapitre 9) exige que tout pod puisse joindre tout pod sans traduction d'adresse. Rien, dans ce modèle, ne restreint quoi que ce soit. Une NetworkPolicy ajoute des restrictions, selon trois principes.
+Le modèle réseau de Kubernetes (chapitre 9.1) exige que tout pod puisse joindre tout pod sans traduction d'adresse. Rien, dans ce modèle, ne restreint quoi que ce soit. Une NetworkPolicy ajoute des restrictions, selon trois principes.
 
 Premier principe : **c'est une liste d'autorisations, jamais une interdiction**. Une NetworkPolicy ne contient que des règles qui autorisent. Il n'existe pas de règle « refuse » ; le refus naît de l'**isolement** : dès qu'un pod est sélectionné par une politique pour une direction, tout ce qui n'est pas explicitement autorisé dans cette direction est refusé.
 
@@ -50,7 +50,7 @@ LES DEUX ISOLEMENTS D'UN POD
 
 La troisième case du schéma est la source de nombreuses erreurs de diagnostic. Autoriser l'entrée de `api` depuis `front` ne suffit pas si `front` est isolé en sortie : il faut aussi que la sortie de `front` autorise `api`. Dans un namespace en refus par défaut dans les deux directions, chaque flux exige donc **deux** autorisations, une à chaque extrémité.
 
-Deux exceptions complètent la règle. Le **trafic de retour** d'une connexion autorisée est implicitement autorisé : les NetworkPolicies sont à états, on n'écrit pas de règle pour la réponse. Et le trafic **entre un pod et son propre nœud** est toujours autorisé : la documentation précise qu'un pod isolé en entrée accepte les connexions venues de son nœud. C'est ce qui permet aux sondes du kubelet (chapitre 4) de fonctionner sous un refus total. Un pod ne peut pas non plus se bloquer lui-même : ce qu'il envoie à sa propre adresse ou à `localhost` ne passe pas par le filtrage.
+Deux exceptions complètent la règle. Le **trafic de retour** d'une connexion autorisée est implicitement autorisé : les NetworkPolicies sont à états, on n'écrit pas de règle pour la réponse. Et le trafic **entre un pod et son propre nœud** est toujours autorisé : la documentation précise qu'un pod isolé en entrée accepte les connexions venues de son nœud. C'est ce qui permet aux sondes du kubelet (chapitre 4.8) de fonctionner sous un refus total. Un pod ne peut pas non plus se bloquer lui-même : ce qu'il envoie à sa propre adresse ou à `localhost` ne passe pas par le filtrage.
 
 ### 14.3 Anatomie d'une NetworkPolicy
 
@@ -297,11 +297,11 @@ cka-m02	10.244.195.192
 cka-m03	10.244.34.128
 ```
 
-Ces adresses sont la première de chaque bloc /26 attribué au nœud (chapitre 9) ; elles changent à chaque création du cluster, les tiennes diffèrent. Elles ne sont jamais attribuées à un pod.
+Ces adresses sont la première de chaque bloc /26 attribué au nœud (chapitre 9.4) ; elles changent à chaque création du cluster, les tiennes diffèrent. Elles ne sont jamais attribuées à un pod.
 
 Pour qu'un pod protégé reste joignable par NodePort et LoadBalancer depuis le réseau des nœuds, la politique doit donc autoriser deux familles d'adresses : le **réseau des nœuds et de leurs clients** (192.168.49.0/24, qui contient le poste, les nœuds et la plage MetalLB) pour le cas local, et les **adresses de tunnel** des trois nœuds, en /32, pour le cas distant. Autoriser tout 10.244.0.0/16 marcherait aussi, mais ouvrirait le port à tous les pods de tous les namespaces, ce que la politique veut justement éviter.
 
-L'autre solution est de supprimer la traduction : avec `externalTrafficPolicy: Local` (chapitre 10), kube-proxy ne transmet qu'aux pods du nœud qui reçoit la requête, sans SNAT ; la politique et le pod voient tous deux l'adresse du client, et seul un `ipBlock` sur les clients légitimes est nécessaire. En contrepartie, un nœud sans pod prêt ne répond plus. Le fil rouge garde `Cluster`, la valeur par défaut, et autorise donc les deux familles.
+L'autre solution est de supprimer la traduction : avec `externalTrafficPolicy: Local` (chapitre 10.10), kube-proxy ne transmet qu'aux pods du nœud qui reçoit la requête, sans SNAT ; la politique et le pod voient tous deux l'adresse du client, et seul un `ipBlock` sur les clients légitimes est nécessaire. En contrepartie, un nœud sans pod prêt ne répond plus. Le fil rouge garde `Cluster`, la valeur par défaut, et autorise donc les deux familles.
 
 Le trafic qui passe par le contrôleur d'Ingress ou par le proxy Envoy ne relève pas de ce cas : ces proxys sont des pods, qui ouvrent eux-mêmes une connexion vers l'adresse du pod de destination, sans traduction. Leur adresse source est celle de leur pod, dans leur namespace : un `namespaceSelector` suffit.
 
@@ -598,7 +598,7 @@ MÉTHODE : DU FLUX À LA POLITIQUE
 | aucune politique n'a d'effet | CNI sans prise en charge des NetworkPolicies |
 | sortie ouverte alors qu'on voulait la fermer | `policyTypes` omis : `Egress` n'est ajouté que s'il existe une section `egress` |
 
-Le chapitre 22 reprend ce diagnostic sur une panne injectée : la politique `autorise-dns` dont le port a été changé.
+L'exercice 22.6 reprend ce diagnostic sur une panne injectée : la politique `autorise-dns` dont le port a été changé.
 
 ### 14.13 Pièges courants
 
@@ -659,7 +659,7 @@ Piège 8 : NodePort et SNAT
 ```
 
 > [!summary] À retenir
-> - Une NetworkPolicy n'autorise que ; le refus vient de l'**isolement** : un pod sélectionné pour une direction n'accepte plus que l'**union** des règles de toutes les politiques qui le sélectionnent pour cette direction.
+> - Une NetworkPolicy ne fait qu'autoriser ; le refus vient de l'**isolement** : un pod sélectionné pour une direction n'accepte plus que l'**union** des règles de toutes les politiques qui le sélectionnent pour cette direction.
 > - Une connexion passe si la **sortie** de la source **et** l'**entrée** de la destination l'autorisent ; le retour est implicite ; le trafic du nœud vers ses pods (sondes) passe toujours.
 > - `policyTypes` par défaut : `Ingress` toujours, `Egress` seulement s'il y a une section `egress`. Écris-le toujours. `[]` refuse tout, `[{}]` autorise tout.
 > - Dans une règle, `from`/`to` **ET** `ports` ; dans une liste, **OU**. `namespaceSelector` et `podSelector` dans le **même** élément = ET ; avec un tiret chacun = OU. `kubectl describe` affiche un bloc `From:` par pair.
@@ -694,7 +694,7 @@ Vérifie qu'aucune NetworkPolicy n'existe dans `boutique`. Crée deux pods de te
 > essai boutique outils; essai boutique intrus; essai default sonde-np
 > ```
 >
-> La fonction `essai` prend le namespace et le pod client ; elle s'écrit de la même façon sous bash et sous zsh. Les noms courts `front.boutique` et `api.boutique` fonctionnent depuis tout namespace grâce aux domaines de recherche du `resolv.conf` des pods (chapitre 11). Le pod `intrus` reçoit les requests et limits par défaut du LimitRange `boutique-limites` (chapitre 8), ce qui satisfait le ResourceQuota ; l'avertissement PodSecurity `restricted` est attendu.
+> La fonction `essai` prend le namespace et le pod client ; elle s'écrit de la même façon sous bash et sous zsh. Les noms courts `front.boutique` et `api.boutique` fonctionnent depuis tout namespace grâce aux domaines de recherche du `resolv.conf` des pods (chapitre 11.6). Le pod `intrus` reçoit les requests et limits par défaut du LimitRange `boutique-limites` (chapitre 8.11), ce qui satisfait le ResourceQuota ; l'avertissement PodSecurity `restricted` est attendu.
 >
 > **Vérification** : `kubectl -n boutique get networkpolicy` affiche `No resources found in boutique namespace.` ; depuis les trois pods, `front 200`, un nom de pod `api-…` et l'adresse ClusterIP du Service `api`. Sans politique, tout est ouvert, y compris pour un pod d'un autre namespace.
 
@@ -827,7 +827,7 @@ Crée les politiques `api-entree` (entrée des pods `app=api` sur TCP 8080 depui
 > kubectl -n default delete pod sonde-np --now
 > ```
 >
-> La fonction `t` lance une commande `kubectl` et n'affiche que son issue. `--now` évite d'attendre les 30 secondes du délai de grâce : `sleep` ignore SIGTERM (chapitre 4). `outils` atteint tout (`outils-sortie` pour sa sortie, `web-entree` et `api-entree` pour l'entrée des cibles). `front` atteint `api` parce que **deux** politiques l'autorisent, `web-sortie` à la source et `api-entree` à la destination, mais pas Internet. `api` ne peut pas joindre `front` : sa sortie se limite au DNS et à `redis` ; agnhost affiche `TIMEOUT`. `intrus` résout les noms mais ne joint rien. `sonde-np`, dans un namespace sans politique, peut tout émettre, mais l'entrée de `front` et d'`api` le refuse. Les trois accès HTTPS à `api` passent, respectivement par le contrôleur d'Ingress, par `front` puis `api`, et par le proxy Envoy. `redis-entree` et `api-sortie` ne sont pas testables avant le chapitre 15, qui crée `redis`.
+> La fonction `t` lance une commande `kubectl` et n'affiche que son issue. `--now` évite d'attendre les 30 secondes du délai de grâce : `sleep` ignore SIGTERM (chapitre 4.10). `outils` atteint tout (`outils-sortie` pour sa sortie, `web-entree` et `api-entree` pour l'entrée des cibles). `front` atteint `api` parce que **deux** politiques l'autorisent, `web-sortie` à la source et `api-entree` à la destination, mais pas Internet. `api` ne peut pas joindre `front` : sa sortie se limite au DNS et à `redis` ; agnhost affiche `TIMEOUT`. `intrus` résout les noms mais ne joint rien. `sonde-np`, dans un namespace sans politique, peut tout émettre, mais l'entrée de `front` et d'`api` le refuse. Les trois accès HTTPS à `api` passent, respectivement par le contrôleur d'Ingress, par `front` puis `api`, et par le proxy Envoy. `redis-entree` et `api-sortie` ne sont pas testables avant le chapitre 15, qui crée `redis`.
 >
 > **Vérification** : la grille affiche `passe` pour les trois lignes `outils`, pour `front → api:8080` et `intrus → DNS`, et `bloqué` pour toutes les autres ; les trois `curl` HTTPS affichent un nom de pod `api-…` ; `kubectl -n boutique get networkpolicy` liste huit politiques : `api-entree`, `api-sortie`, `autorise-dns`, `outils-sortie`, `redis-entree`, `refus-par-defaut`, `web-entree`, `web-sortie`.
 
@@ -940,7 +940,7 @@ Remplace la politique `et-ou` par la politique `plage-ports`, qui n'autorise l'e
 > kubectl delete namespace essai-np
 > ```
 >
-> 8080, 8081 et 8085 sont dans la plage inclusive et répondent `a`, `b` et `c` ; 9000 est hors plage et expire. `describe` affiche `To Port Range: 8080-8085/TCP`. La variante nommée est refusée par le serveur d'API avec le message `may not be specified when `port` is non-numeric` : une plage n'a de sens qu'entre deux numéros. Le namespace `essai-np` et ses pods disparaissent avec la dernière commande.
+> 8080, 8081 et 8085 sont dans la plage inclusive et répondent `a`, `b` et `c` ; 9000 est hors plage et expire. `describe` affiche `To Port Range: 8080-8085/TCP`. La variante nommée est refusée par le serveur d'API avec le message « may not be specified when `port` is non-numeric » : une plage n'a de sens qu'entre deux numéros. Le namespace `essai-np` et ses pods disparaissent avec la dernière commande.
 >
 > **Vérification** : `8080 : a`, `8081 : b`, `8085 : c`, puis pour 9000 la ligne `command terminated with exit code 28` de kubectl suivie de `expiration` ; le second `apply` échoue ; `kubectl get ns essai-np` répond `NotFound`. L'état laissé est celui de l'instantané **I2** : les huit NetworkPolicies de `boutique`, sans pod de test.
 

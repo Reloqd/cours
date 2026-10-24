@@ -41,7 +41,7 @@ lab/
     └── corriger.sh             note par tâche et total sur 100
 ```
 
-Les scripts sont écrits en Bash strict (`set -euo pipefail`) et n'utilisent que `minikube`, `kubectl`, `helm`, `openssl` et `curl`, plus les outils de base du système. Ils se lancent depuis n'importe quel dossier : `lab/restaurer.sh I4` depuis le dossier du cours, ou le chemin complet depuis ailleurs.
+Les scripts sont écrits en Bash strict (`set -euo pipefail`) et n'utilisent que `docker`, `minikube`, `kubectl`, `helm`, `openssl` et `curl`, plus les outils de base du système. Ils se lancent depuis n'importe quel dossier : `lab/restaurer.sh I4` depuis le dossier du cours, ou le chemin complet depuis ailleurs.
 
 Ils visent **toujours** le contexte kubeconfig du profil (`kubectl --context cka`, `helm --kube-context cka`), quel que soit ton contexte courant. Tu peux donc rester sur `alice@cka` ou sur `boutique` sans risque de lancer une restauration avec les droits d'alice. Trois variables d'environnement en règlent le comportement :
 
@@ -56,9 +56,9 @@ Ils visent **toujours** le contexte kubeconfig du profil (`kubectl --context cka
 
 ### C.2 Démarrer : `lab/demarrer.sh`
 
-Le script vérifie d'abord le poste : présence des cinq outils, Docker utilisable sans `sudo`, versions de minikube (v1.39.0), de kubectl (1.37) et de Helm (4.x), mémoire disponible (10 Gio au moins, 12 conseillés), et surtout la **limite inotify** (`fs.inotify.max_user_instances` ≥ 512 et `fs.inotify.max_user_watches` ≥ 524288). Une version différente ne produit qu'un avertissement ; une limite inotify trop basse arrête le script, sauf avec `CKA_FORCER=1`.
+Le script vérifie d'abord le poste : présence des six outils (`docker`, `minikube`, `kubectl`, `helm`, `openssl`, `curl`), Docker utilisable sans `sudo`, versions de minikube (v1.39.0), de kubectl (1.37) et de Helm (4.x), mémoire disponible (10 Gio au moins, 12 conseillés), et surtout la **limite inotify** (`fs.inotify.max_user_instances` ≥ 512 et `fs.inotify.max_user_watches` ≥ 524288). Une version différente ne produit qu'un avertissement ; une limite inotify trop basse arrête le script, sauf avec `CKA_FORCER=1`.
 
-Il lance ensuite la commande du chapitre 1, puis attend que les trois nœuds soient `Ready`, que le DaemonSet `calico-node` soit déployé partout et que CoreDNS réponde :
+Il lance ensuite la commande du chapitre 1.6, puis attend que les trois nœuds soient `Ready`, que le DaemonSet `calico-node` soit déployé partout et que CoreDNS réponde :
 
 ```bash
 minikube start -p cka --driver=docker --container-runtime=containerd \
@@ -98,7 +98,7 @@ Sous minikube, un instantané n'est pas une image de machine virtuelle qu'on rec
 Chaque restauration part de nœuds neufs, qui retéléchargent toutes les images (Calico, nginx, busybox, netshoot, agnhost, redis, Envoy, cert-manager, podinfo…) : les durées dépendent surtout de ton débit, et le démarrage seul a varié de 57 s à 3 min 51 s d'un essai à l'autre. Compte un quart d'heure pour I4 (14 min 23 s mesurées), davantage sur une connexion lente. Les étapes les plus longues sont le chapitre 15 (addons `volumesnapshots` et `csi-hostpath-driver`, agrandissement et instantané du volume de redis : 2 à 5 minutes), le chapitre 8 (trois rollouts successifs) et le chapitre 12 (minikube attend que le contrôleur d'Ingress réponde).
 
 > [!tip]
-> Un `minikube -p cka stop` suivi d'un `minikube -p cka start` conserve tout (objets, addons, données) en une minute et demie environ. Garde `restaurer.sh` pour repartir d'un état propre ou sauter des chapitres.
+> Un `minikube -p cka stop` suivi d'un `minikube -p cka start` conserve tout (objets, addons, données) en deux minutes environ (arrêt en 1 min 20 s à 1 min 26 s, démarrage en 29 s, mesurés sur l'état I4). Garde `restaurer.sh` pour repartir d'un état propre ou sauter des chapitres.
 
 ### C.4 Contenu des instantanés
 
@@ -129,8 +129,8 @@ Quelques éléments vivent hors du cluster ou demandent un réglage que les exer
 | `boutique-tls.key`, `boutique-tls.crt` | `~/cka/boutique/` | Les exercices des chapitres 13 et 14 s'en servent comme `--cacert`. Si les fichiers existent, le Secret est recréé à partir d'eux ; sinon ils sont générés. |
 | `alice.key`, `alice.csr`, `alice.crt` | `~/cka/rbac/` | Un cluster recréé a une nouvelle autorité : le certificat d'alice est réémis (la clé est gardée), et les identifiants `alice` de ton kubeconfig sont mis à jour. |
 | `kustomize/base/`, `kustomize/overlays/recette/` | `~/cka/kustomize/` | Copiés seulement si le dossier n'existe pas : ton propre travail n'est jamais écrasé. |
-| dépôt Helm `podinfo` | ta configuration Helm | `helm repo add podinfo https://stefanprodan.github.io/podinfo`, comme au chapitre 17. |
-| `/mnt/archives/journal.txt` | nœud `cka-m02` | Trace de l'exercice 15.1. |
+| dépôt Helm `podinfo` | ta configuration Helm | `helm repo add podinfo https://stefanprodan.github.io/podinfo`, comme au chapitre 17.3.1. |
+| `/mnt/archives/journal.txt` | nœud `cka-m02` | Trace de l'exercice 15.2. |
 | plage MetalLB | profil minikube | Voir C.7.6 : sans elle, MetalLB perd sa configuration à chaque `minikube start`. |
 | `nodeSelector` de `csi-hostpath-resizer` | `kube-system` | Voir C.7.7 : sans lui, l'agrandissement d'un volume échoue deux fois sur trois. |
 
@@ -188,7 +188,7 @@ L'[annexe B](annexe-b-examen-blanc.md) donne les dix-sept énoncés et leurs sol
 
 ```
 lab/restaurer.sh I4 --oui        # cluster propre (facultatif si tu es déjà en I4)
-lab/examen-blanc/preparer.sh     # ≈ 15 s à 1 min
+lab/examen-blanc/preparer.sh     # ≈ 13 s à 1 min
    … 2 heures de tâches, réponses écrites dans ~/cka/examen/ …
 lab/examen-blanc/preparer.sh 14  # au moment d'aborder la tâche 14
 lab/examen-blanc/preparer.sh 15  # au moment d'aborder la tâche 15
@@ -271,7 +271,7 @@ Chaque nœud reçoit 3 Gio (`--memory=3072`), soit 9 Gio pour le cluster. Le con
 
 #### C.7.6 MetalLB perd sa plage après un redémarrage
 
-À chaque `minikube start`, minikube réapplique les manifestes de ses addons, dont la ConfigMap `metallb-system/config`, avec la plage enregistrée **dans le profil**. Une plage posée seulement par `kubectl apply` (exercice 10.4) est alors écrasée par une plage vide (`addresses: - -`) : le contrôleur journalise `not processing, still waiting for config`, et `front-lb` comme le Gateway gardent leur EXTERNAL-IP à l'affichage mais ne répondent plus. L'état `10` enregistre donc la plage dans le profil, en plus de la ConfigMap. `minikube addons configure metallb` pose deux questions ; dans un terminal, réponds-y simplement. Par un tube, il faut une pause entre les deux réponses, faute de quoi minikube avale les deux lignes à la première question et n'enregistre rien :
+À chaque `minikube start`, minikube réapplique les manifestes de ses addons, dont la ConfigMap `metallb-system/config`, avec la plage enregistrée **dans le profil**. L'exercice 10.4 enregistre la plage dans le profil (`minikube addons configure metallb`) avant de l'appliquer par `kubectl apply`. Si l'on saute la première étape, la plage posée seulement par `kubectl apply` est écrasée au `start` suivant par une plage vide (`addresses: - -`) : le contrôleur journalise `not processing, still waiting for config`, et `front-lb` comme le Gateway gardent leur EXTERNAL-IP à l'affichage mais ne répondent plus. L'état `10` fait comme l'exercice : il enregistre la plage dans le profil, en plus de la ConfigMap. `minikube addons configure metallb` pose deux questions ; dans un terminal, réponds-y simplement. Par un tube, il faut une pause entre les deux réponses, faute de quoi minikube avale les deux lignes à la première question et n'enregistre rien :
 
 ```bash
 { echo 192.168.49.100; sleep 2; echo 192.168.49.120; } | minikube -p cka addons configure metallb

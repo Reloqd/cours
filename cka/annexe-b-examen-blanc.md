@@ -9,7 +9,7 @@ date: 2026-10-23
 
 Cet examen blanc reproduit les conditions du CKA autant qu'un lab local le permet : dix-sept tâches pratiques, deux heures, cent points, réussite à 66. Les tâches couvrent les cinq domaines du programme v1.37 et reprennent les gestes travaillés dans les chapitres 3 à 23, sans les répéter mot pour mot : un énoncé d'examen donne le résultat attendu, jamais la commande. Un script prépare le cluster, un autre note ton travail tâche par tâche.
 
-Passe-le une fois le chapitre 23 terminé, d'une traite, chronomètre en marche, avec pour seules aides les sites autorisés à l'examen. Ne lis le corrigé qu'après la correction automatique : une tâche ratée t'apprend plus en relisant ta propre tentative qu'en lisant la solution d'abord. Le chapitre [24](24-examen.md) explique comment exploiter ce résultat avant de passer aux sessions killer.sh.
+Passe-le une fois le chapitre 23 terminé, d'une traite, chronomètre en marche, avec pour seules aides les sites autorisés à l'examen. Ne lis le corrigé qu'après la correction automatique : une tâche ratée t'apprend plus en relisant ta propre tentative qu'en lisant la solution d'abord. Le chapitre [24.8](24-examen.md) explique comment exploiter ce résultat avant de passer aux sessions killer.sh.
 
 ```
 Déroulé :
@@ -27,14 +27,14 @@ L'examen se déroule sur le cluster du cours, profil minikube `cka`, contexte ku
 
 Les ressources autorisées sont celles de l'examen : `kubernetes.io/docs`, `kubernetes.io/blog`, `helm.sh/docs` et `gateway-api.sigs.k8s.io`. Ni le cours, ni tes notes, ni un moteur de recherche. Les commandes dans un nœud passent par `minikube -p cka ssh -n <nœud>` puis `sudo`, là où l'examen réel donne `ssh <nœud>` puis `sudo -i`.
 
-Les tâches sont indépendantes, sauf sur un point : une panne non réparée pèse sur la suite. La tâche 14 rend `cka-m02` indisponible (au-delà de cinq minutes, ses pods sont évincés), la tâche 15 empêche tout nouveau pod d'être planifié. Leurs pannes ne sont donc injectées qu'à la demande, par `lab/examen-blanc/preparer.sh 14` et `lab/examen-blanc/preparer.sh 15`, au moment où tu abordes ces tâches. Tu peux, comme à l'examen, traiter les tâches dans l'ordre de ton choix et marquer celles qui résistent pour y revenir.
+Les tâches sont indépendantes, sauf sur un point : une panne non réparée pèse sur la suite. La tâche 14 rend `cka-m02` indisponible (au-delà de cinq minutes, ses pods sont évincés, et ceux qui n'ont pas de contrôleur, comme les pods que tu crées aux tâches 4, 7 et 12 s'ils y tournent, ne reviennent jamais : `preparer.sh 14` les liste avant d'agir ; traite cette tâche d'une traite), la tâche 15 empêche tout nouveau pod d'être planifié. Leurs pannes ne sont donc injectées qu'à la demande, par `lab/examen-blanc/preparer.sh 14` et `lab/examen-blanc/preparer.sh 15`, au moment où tu abordes ces tâches. Tu peux, comme à l'examen, traiter les tâches dans l'ordre de ton choix et marquer celles qui résistent pour y revenir.
 
 > [!warning] Ce qui ne rapporte rien
 > Une tâche faite dans le mauvais namespace, un objet au nom approximatif ou un fichier de réponse au mauvais endroit valent zéro, même si le travail est juste. Relis les noms de l'énoncé avant de valider chaque tâche.
 
 ### B.2 Préparation
 
-Pars de l'instantané I4 (fin du chapitre 18). Si ton cluster en est loin, ou si tu as déjà passé l'examen blanc, restaure-le d'abord (5 à 10 minutes) :
+Pars de l'instantané I4 (fin du chapitre 18). Si ton cluster en est loin, ou si tu as déjà passé l'examen blanc, restaure-le d'abord (un quart d'heure environ : 14 min 23 s mesurées, voir annexe C.3) :
 
 ```bash
 lab/restaurer.sh I4                 # depuis le dossier du cours, comme tous les scripts du lab
@@ -154,7 +154,7 @@ Crée la StorageClass `lente` : provisioner `hostpath.csi.k8s.io`, politique de 
 
 **Contexte** : `cka`. **Nœud** : `cka`.
 
-Sur le nœud `cka`, prends un instantané d'etcd et enregistre-le dans `/var/lib/minikube/backup/examen.db`. etcd écoute sur `https://127.0.0.1:2379` ; son CA, son certificat et sa clé de serveur sont dans `/var/lib/minikube/certs/etcd/` (`ca.crt`, `server.crt`, `server.key`). `etcdctl` et `etcdutl` sont installés sur le nœud. Vérifie que l'instantané est valide.
+Sur le nœud `cka`, prends un instantané d'etcd et enregistre-le dans `/var/lib/minikube/backup/examen.db`. etcd écoute sur `https://127.0.0.1:2379` ; sa CA, son certificat et sa clé de serveur sont dans `/var/lib/minikube/certs/etcd/` (`ca.crt`, `server.crt`, `server.key`). `etcdctl` et `etcdutl` sont installés sur le nœud. Vérifie que l'instantané est valide.
 
 #### Tâche 14 — Nœud NotReady (6 points)
 
@@ -478,13 +478,15 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 >     emptyDir: {}
 > ```
 >
-> Le sidecar natif est un init container avec `restartPolicy: Always` : un second conteneur placé dans `containers` serait un sidecar « classique », que l'énoncé n'accepte pas. Il démarre **avant** le conteneur principal, donc avant que le fichier existe : `tail -F` (et non `-f`) attend que le fichier apparaisse au lieu de sortir en erreur. Le `trap` lui fait quitter proprement sur `SIGTERM`, comme au chapitre 4.
+> Le sidecar natif est un init container avec `restartPolicy: Always` : un second conteneur placé dans `containers` serait un sidecar « classique », que l'énoncé n'accepte pas. Il démarre **avant** le conteneur principal, donc avant que le fichier existe : `tail -F` (et non `-f`) attend que le fichier apparaisse au lieu de sortir en erreur. Le `trap` lui fait quitter proprement sur `SIGTERM`, comme au chapitre 4.10.
 >
 > **Vérification** :
 > ```bash
 > kubectl -n examen-app get pod journal                     # READY 2/2, STATUS Running
 > kubectl -n examen-app logs journal -c suiveur --tail=3    # lignes datées
 > ```
+>
+> Dans les premières secondes, la première de ces lignes peut être le message de `tail` lui-même : `tail: /var/log/app.log has appeared; following end of new file`.
 >
 > **Doc à ouvrir** : « Sidecar Containers » (kubernetes.io).
 
@@ -536,6 +538,8 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 > ```bash
 > curl -s http://$(minikube -p cka ip):30090/hostname; echo     # catalogue-<hachage>-<suffixe>
 > ```
+>
+> Lancé dans la seconde qui suit le `kubectl apply`, ce `curl` peut n'afficher qu'une ligne vide : kube-proxy n'a pas encore programmé le nouveau NodePort. Relance-le.
 >
 > **Doc à ouvrir** : « Service » et « Debug Services » (kubernetes.io).
 
@@ -628,7 +632,7 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 > ```bash
 > BDD=$(kubectl -n examen-net get pod bdd -o jsonpath='{.status.podIP}')
 > kubectl -n examen-net exec front -- wget -qO- -T 3 http://$BDD:5432/hostname; echo   # bdd
-> kubectl -n examen-net exec autre -- wget -qO- -T 3 http://$BDD:5432/hostname         # wget: download timed out
+> kubectl -n examen-net exec autre -- wget -qO- -T 3 http://$BDD:5432/hostname         # wget: download timed out, code de sortie 1
 > ```
 >
 > **Doc à ouvrir** : « Network Policies » (kubernetes.io).
@@ -709,7 +713,7 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 >
 > `snapshot save` ne crée pas le dossier de destination, d'où le `mkdir -p`. `sudo` est indispensable : les clés d'etcd sont lisibles par root seul. Depuis etcd 3.6, le contrôle se fait avec `etcdutl snapshot status`, `etcdctl` n'ayant plus que `snapshot save` ; `ETCDCTL_API=3` est inutile en 3.7 et ne provoque qu'un avertissement. À l'examen, si l'énoncé ne donne pas les chemins, lis-les dans le manifeste : `grep -E 'cert-file|key-file|trusted-ca-file|listen-client-urls' /etc/kubernetes/manifests/etcd.yaml` (sous `/etc/kubernetes/pki/etcd/` sur un cluster kubeadm).
 >
-> **Vérification** : le tableau de `etcdutl snapshot status` affiche une empreinte, une révision, le nombre de clés, une taille de quelques mégaoctets et la version `3.7.0`.
+> **Vérification** : le tableau de `etcdutl snapshot status` affiche une empreinte, une révision (au-delà du milliard sur le lab, après le `--bump-revision` de l'exercice 20.5), le nombre de clés (environ 3 100), une taille d'une vingtaine de mégaoctets (24 MB relevés) et la version `3.7.0`.
 >
 > **Doc à ouvrir** : « Operating etcd clusters for Kubernetes » (kubernetes.io), section *Backing up an etcd cluster*. Rappelle-toi que sa partie restauration par `etcdctl` est périmée (annexe A.11).
 
@@ -720,7 +724,7 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 > kubectl get nodes                                            # cka-m02 NotReady
 > kubectl describe node cka-m02 | grep -A8 Conditions          # Unknown, « Kubelet stopped posting node status. »
 > minikube -p cka ssh -n cka-m02                               # examen : ssh cka-m02 puis sudo -i
-> sudo systemctl status kubelet --no-pager | head -4           # disabled ; Active: inactive (dead)
+> sudo systemctl status kubelet --no-pager | head -5           # disabled ; Active: inactive (dead)
 > sudo journalctl -u kubelet -n 20 --no-pager                  # arrêt propre, aucune erreur de démarrage
 > sudo systemctl enable --now kubelet
 > systemctl is-enabled kubelet                                 # enabled
@@ -772,7 +776,7 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 > ```bash
 > helm repo add podinfo https://stefanprodan.github.io/podinfo     # « already exists » si fait au chapitre 17
 > helm repo update
-> helm show values podinfo/podinfo --version 6.15.0 | grep -n replicaCount   # 3:replicaCount: 1
+> helm show values podinfo/podinfo --version 6.15.0 | grep -n replicaCount   # 3:replicaCount: 1 (puis un commentaire, ligne 284)
 > helm install exam-podinfo podinfo/podinfo --version 6.15.0 \
 >   -n examen-helm --set replicaCount=2 --wait --timeout 5m
 > ```
@@ -838,7 +842,7 @@ Chaque solution donne une façon rapide d'obtenir le résultat, l'explication de
 > kubectl -n examen-crd get issuer examen-issuer              # READY True
 > kubectl -n examen-crd wait --for=condition=Ready certificate/examen-cert --timeout=60s
 > kubectl -n examen-crd get secret examen-tls -o jsonpath='{.data.tls\.crt}' | base64 -d \
->   | openssl x509 -noout -ext subjectAltName                  # DNS:examen.example
+>   | openssl x509 -noout -ext subjectAltName                  # X509v3 Subject Alternative Name: puis DNS:examen.example
 > ```
 >
 > **Doc à ouvrir** : la documentation de cert-manager n'est pas autorisée à l'examen. Les CRD d'un opérateur décrivent leur schéma : `kubectl explain issuer.spec.selfSigned` et `kubectl explain certificate.spec --recursive | less` donnent les champs. Pour la liste des CRD, « JSONPath Support » (kubernetes.io).

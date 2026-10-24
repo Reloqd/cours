@@ -7,7 +7,7 @@ date: 2026-10-23
 
 ## 23. Dépanner les nœuds et le control plane
 
-Le chapitre 22 supposait un cluster sain et cherchait la panne dans l'application. Ici, c'est le cluster lui-même qui flanche : un nœud passe `NotReady`, les nouveaux pods ne sont plus placés, un `kubectl scale` reste sans effet, ou `kubectl` ne parvient même plus à joindre l'API. Ces pannes demandent de quitter `kubectl` pour descendre sur les nœuds : `systemctl`, `journalctl`, `crictl`, les fichiers de `/etc/kubernetes` et de `/var/lib/kubelet`. Le chapitre couvre les compétences « Troubleshoot clusters and nodes » et « Troubleshoot cluster components » du domaine Troubleshooting (30 %), les deux qui rapportent le plus de points à l'examen parmi les tâches de dépannage, car une seule erreur de manifeste y suffit à tout bloquer. Il s'appuie sur le [chapitre 2](02-architecture.md) (composants, pods statiques, kubelet sous systemd), sur le [chapitre 21](21-journaux-et-metriques.md) (journaux) et renvoie au [chapitre 19](19-kubeadm-installation-ha-et-mises-a-jour.md) pour les certificats et au [chapitre 20](20-etcd-sauvegarde-et-restauration.md) pour etcd. Les exercices sont les pannes 11 à 19 de `lab/pannes.sh`, plus trois exercices de lecture.
+Le chapitre 22 supposait un cluster sain et cherchait la panne dans l'application. Ici, c'est le cluster lui-même qui flanche : un nœud passe `NotReady`, les nouveaux pods ne sont plus placés, un `kubectl scale` reste sans effet, ou `kubectl` ne parvient même plus à joindre l'API. Ces pannes demandent de quitter `kubectl` pour descendre sur les nœuds : `systemctl`, `journalctl`, `crictl`, les fichiers de `/etc/kubernetes` et de `/var/lib/kubelet`. Le chapitre couvre les compétences « Troubleshoot clusters and nodes » et « Troubleshoot cluster components » du domaine Troubleshooting (30 %), les deux qui rapportent le plus de points à l'examen parmi les tâches de dépannage, car une seule erreur de manifeste y suffit à tout bloquer. Il s'appuie sur le [chapitre 2](02-architecture.md) (composants, pods statiques, kubelet sous systemd), sur le [chapitre 21](21-journaux-et-metriques.md) (journaux) et renvoie au [chapitre 19.7](19-kubeadm-installation-ha-et-mises-a-jour.md) pour les certificats et au [chapitre 20](20-etcd-sauvegarde-et-restauration.md) pour etcd. Les exercices sont les pannes 11 à 19 de `lab/pannes.sh`, plus trois exercices de lecture.
 
 ### 23.1 La carte du terrain
 
@@ -62,7 +62,7 @@ Arbre de décision
 | Accès au nœud | `ssh <nœud>` puis `sudo -i` | `minikube -p cka ssh [-n cka-m02]` puis `sudo` |
 | Manifestes statiques | `/etc/kubernetes/manifests/` | identique |
 | Certificats | `/etc/kubernetes/pki/` (etcd : `pki/etcd/`) | `/var/lib/minikube/certs/` (etcd : `certs/etcd/`) |
-| Données etcd | `/var/lib/etcd` | `/var/lib/minikube/etcd` |
+| Données etcd | `/var/lib/etcd` | `/var/lib/minikube/etcd` (`/var/lib/minikube/etcd-restore` après l'exercice 20.5 ; `lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`) |
 | Port de l'API | 6443 | 8443 |
 | kubeconfigs des composants | `/etc/kubernetes/{admin,super-admin,controller-manager,scheduler,kubelet}.conf` | identique (plus `/var/lib/minikube/kubeconfig`) |
 | Configuration du kubelet | `/var/lib/kubelet/config.yaml` | identique |
@@ -109,7 +109,7 @@ Chronologie d'un kubelet qui s'arrête (valeurs par défaut)
              il achève les suppressions en attente
 ```
 
-Le lab l'a mesuré : après `systemctl stop kubelet` sur `cka-m03`, le nœud est passé `NotReady` en 44 s, soit 52 s après le dernier renouvellement de sa Lease. Les évictions sont en outre limitées en débit : 0,1 nœud par seconde (`--node-eviction-rate`), et, dans un cluster d'au plus 50 nœuds, plus aucune éviction quand au moins 55 % des nœuds d'une zone sont malades (`--unhealthy-zone-threshold`, `--large-cluster-size-threshold`) ; le contrôleur suppose alors une panne de réseau plutôt qu'une panne de nœuds. Les labels `topology.kubernetes.io/zone` du chapitre 8 définissent ces zones dans le lab.
+Le lab l'a mesuré : après `systemctl stop kubelet` sur `cka-m03`, le nœud est passé `NotReady` en 44 à 51 s selon les essais, soit 52 à 54 s après le dernier renouvellement de sa Lease. Les évictions sont en outre limitées en débit : 0,1 nœud par seconde (`--node-eviction-rate`), et, dans un cluster d'au plus 50 nœuds, plus aucune éviction quand au moins 55 % des nœuds d'une zone sont malades (`--unhealthy-zone-threshold`, `--large-cluster-size-threshold`) ; le contrôleur suppose alors une panne de réseau plutôt qu'une panne de nœuds. Les labels `topology.kubernetes.io/zone` du chapitre 8 définissent ces zones dans le lab.
 
 > [!warning] Sans controller-manager, pas de NotReady
 > Ce ne sont pas les nœuds qui se déclarent morts. Si kube-controller-manager est arrêté, un nœud dont le kubelet s'est tu reste affiché `Ready` indéfiniment, avec une Lease périmée. Quand l'état des nœuds paraît incohérent, vérifie d'abord le controller-manager.
@@ -123,7 +123,7 @@ La valeur de la condition `Ready` sépare déjà les pistes :
 | `Unknown` | le contrôleur des nœuds | le kubelet ne donne plus de nouvelles | `Kubelet stopped posting node status.` |
 | `False` | le kubelet lui-même | le kubelet tourne et joint l'API, mais un sous-système n'est pas prêt | `container runtime network not ready: NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized` ; `container runtime is down` ; `PLEG is not healthy: pleg was last seen active …` |
 
-`Unknown` désigne le kubelet lui-même (arrêté, en boucle de démarrage, incapable de s'authentifier) ou le réseau entre le nœud et l'API. `False` désigne ce que le kubelet surveille : le runtime, le CNI (aucune configuration dans `/etc/cni/net.d`, chapitre 9), le PLEG (le kubelet n'arrive plus à relister les conteneurs, souvent un runtime figé). Le message de la condition est lisible par `kubectl describe node` ou directement :
+`Unknown` désigne le kubelet lui-même (arrêté, en boucle de démarrage, incapable de s'authentifier) ou le réseau entre le nœud et l'API. `False` désigne ce que le kubelet surveille : le runtime, le CNI (aucune configuration dans `/etc/cni/net.d`, chapitre 9.3), le PLEG (le kubelet n'arrive plus à relister les conteneurs, souvent un runtime figé). Le message de la condition est lisible par `kubectl describe node` ou directement :
 
 ```bash
 kubectl get node cka-m03 -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
@@ -166,11 +166,11 @@ sudo journalctl -u kubelet -n 200 --no-pager | grep -E 'command failed|E[0-9]{4}
 | `failed to run Kubelet: open /…/ca.crt: no such file or directory` | un fichier référencé par la configuration est absent (`clientCAFile`, `staticPodPath` inexistant n'est, lui, qu'ignoré) | config.yaml |
 | `failed to run Kubelet: unable to load bootstrap kubeconfig: …` ou `invalid kubeconfig` | kubeconfig du kubelet absent ou faux | `/etc/kubernetes/kubelet.conf`, options de l'unité |
 | `failed to run Kubelet: running with swap on is not supported, please disable swap or set --fail-swap-on flag to false` | swap actif et `failSwapOn: true` | swap ou config.yaml |
-| refus de démarrer sur un hôte en cgroup v1 | `failCgroupV1` vaut `true` par défaut depuis la 1.35 | passer l'hôte en cgroup v2 ; `failCgroupV1: false` n'est qu'un contournement temporaire (chapitre 19) |
+| refus de démarrer sur un hôte en cgroup v1 | `failCgroupV1` vaut `true` par défaut depuis la 1.35 | passer l'hôte en cgroup v2 ; `failCgroupV1: false` n'est qu'un contournement temporaire (chapitre 19.2.4) |
 | `unknown flag: --…` | option invalide dans l'unité ou le drop-in | `systemctl cat kubelet`, puis `systemctl daemon-reload` |
 | `x509: certificate has expired or is not yet valid` | certificat client du kubelet expiré, ou horloge du nœud fausse | `/var/lib/kubelet/pki/`, `date` |
 | `connect: connection refused` vers `…:6443` (`:8443` sur le lab) | API injoignable depuis le nœud | réseau, apiserver |
-| `"Container runtime network not ready" … cni plugin not initialized` | pas de configuration CNI | `/etc/cni/net.d`, pods du CNI (chapitre 9) |
+| `"Container runtime network not ready" … cni plugin not initialized` | pas de configuration CNI | `/etc/cni/net.d`, pods du CNI (chapitre 9.3) |
 
 Le pilote de cgroups, source classique de pannes autrefois, ne l'est plus avec containerd 2.x : depuis la 1.34, le kubelet le demande au runtime par l'appel CRI `RuntimeConfig` et ne se sert du champ `cgroupDriver` qu'en repli, pour un runtime qui ne sait pas répondre (containerd 1.x). Toute modification de l'unité ou du drop-in exige `sudo systemctl daemon-reload` avant le redémarrage ; une modification de `/var/lib/kubelet/config.yaml` exige seulement `sudo systemctl restart kubelet`. Pour vérifier un certificat : `sudo openssl x509 -noout -enddate -in /var/lib/kubelet/pki/kubelet-client-current.pem` (ou, si `openssl` manque dans le nœud, en recopiant le fichier sur ton poste). Le kubelet le renouvelle seul tant que `rotateCertificates: true` et que le controller-manager approuve et signe ses CSR : un certificat expiré sur un seul nœud trahit souvent un nœud éteint au-delà de la durée de vie du certificat.
 
@@ -324,7 +324,7 @@ minikube -p cka ssh -n cka-m02 -- 'curl -s http://127.0.0.1:10256/healthz; echo'
 minikube -p cka ssh -n cka-m02 -- 'sudo iptables-save -t nat | grep -c KUBE-SVC'
 ```
 
-kube-proxy valide sa configuration au démarrage et sort en erreur si elle est fausse. En 1.37, sous Linux, le mode doit être `iptables`, `nftables`, `ipvs` (déprécié, encore accepté tant que la porte `KubeProxyIPVS` est active) ou vide ; toute autre valeur donne `failed validate: KubeProxyConfiguration.Mode: Invalid value: "…": must be iptables, ipvs, nftables or blank (blank means the best-available proxy [currently iptables])`. Comme le DaemonSet ne relit pas la ConfigMap à chaud, une modification de la ConfigMap n'a d'effet qu'au redémarrage des pods : `kubectl -n kube-system rollout restart daemonset kube-proxy`. C'est vrai pour une réparation comme pour une panne.
+kube-proxy valide sa configuration au démarrage et sort en erreur si elle est fausse. En 1.37, sous Linux, le mode doit être `iptables`, `nftables`, `ipvs` (déprécié, encore accepté tant que la porte `KubeProxyIPVS` est active) ou vide ; toute autre valeur donne `failed validate: KubeProxyConfiguration.Mode.ProxyMode: Invalid value: "…": must be iptables, ipvs, nftables or blank (blank means the best-available proxy [currently iptables])`. Comme le DaemonSet ne relit pas la ConfigMap à chaud, une modification de la ConfigMap n'a d'effet qu'au redémarrage des pods : `kubectl -n kube-system rollout restart daemonset kube-proxy`. C'est vrai pour une réparation comme pour une panne.
 
 ### 23.7 kubeconfig et accès à l'API
 
@@ -340,7 +340,7 @@ kubectl config set-cluster cka --server=https://192.168.49.2:8443
 kubectl config use-context cka
 ```
 
-Sur un control plane kubeadm, `/etc/kubernetes/admin.conf` est le kubeconfig d'administration de secours : `kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes`, en root. Son serveur est `controlPlaneEndpoint` ; ses certificats expirent avec ceux du cluster (un an), et `kubeadm certs renew admin.conf` le régénère (chapitre 19). Ne prends pas l'habitude de `super-admin.conf`, qui contourne RBAC.
+Sur un control plane kubeadm, `/etc/kubernetes/admin.conf` est le kubeconfig d'administration de secours : `kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes`, en root. Son serveur est `controlPlaneEndpoint` ; ses certificats expirent avec ceux du cluster (un an), et `kubeadm certs renew admin.conf` le régénère (chapitre 19.7). Ne prends pas l'habitude de `super-admin.conf`, qui contourne RBAC.
 
 > [!info] minikube ≠ examen
 > minikube écrit le contexte `cka` dans `~/.kube/config`, avec le serveur `https://<IP du nœud cka>:8443` et des certificats référencés par chemin dans le dossier de minikube. Si l'adresse ou le port du kubeconfig ne correspond plus (après une modification, ou un nouveau réseau Docker), `minikube -p cka update-context` le réécrit. Dans le nœud, `kubectl` n'est pas dans le `PATH` : `sudo /var/lib/minikube/binaries/v1.37.0/kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes`.
@@ -455,13 +455,13 @@ Lance `lab/pannes.sh casser 11`. Les pods existants tournent, mais tout nouveau 
 > sudo grep -h 'image:' /etc/kubernetes/manifests/*.yaml
 > sudo cp /etc/kubernetes/manifests/kube-scheduler.yaml /root/kube-scheduler.yaml.avant
 > sudo sed -i 's#kube-scheduler:v1.37.99#kube-scheduler:v1.37.0#' /etc/kubernetes/manifests/kube-scheduler.yaml
-> sudo crictl ps --name kube-scheduler
+> sudo crictl ps --name kube-scheduler          # relancer jusqu'à voir le conteneur Running
 > exit
 > kubectl -n default get pod essai-planif -o wide
 > kubectl -n default delete pod essai-planif
 > ```
 >
-> La comparaison des images des quatre manifestes montre que tous les autres composants sont en `v1.37.0` ; l'image est déjà présente sur le nœud (`sudo crictl images | grep scheduler`), le conteneur démarre en quelques secondes, et le pod de test est placé aussitôt : le scheduler reprend la file des pods en attente.
+> La comparaison des images des quatre manifestes montre que tous les autres composants sont en `v1.37.0` ; l'image est déjà présente sur le nœud (`sudo crictl images | grep scheduler`). Le kubelet met une dizaine de secondes à voir le manifeste modifié et à relancer le conteneur (11 s mesurées) : un `crictl ps` lancé aussitôt n'affiche que la ligne d'en-tête. Dès que le scheduler tourne, le pod de test est placé : le scheduler reprend la file des pods en attente. Le mirror pod, lui, peut afficher `ImagePullBackOff` quelques secondes de plus.
 >
 > **Vérification** : `kubectl -n kube-system get pods -l component=kube-scheduler` montre `1/1 Running`, `sudo ls /etc/kubernetes/manifests` dans le nœud ne liste que les quatre manifestes, et `lab/pannes.sh verifier 11` réussit.
 
@@ -508,29 +508,27 @@ Lance `lab/pannes.sh casser 12`. On signale que `kubectl -n boutique scale deplo
 > ```
 >
 > ```
-> 17:    - --authentication-kubeconfig=/etc/kubernetes/controller-manager.conf
-> 18:    - --authorization-kubeconfig=/etc/kubernetes/controller-manager.conf
-> 25:    - --kubeconfig=/etc/kubernetes/controleur-manager.conf
-> …
-> 82:    - mountPath: /etc/kubernetes/controller-manager.conf
-> 83:      name: kubeconfig
-> …
-> 112:      path: /etc/kubernetes/controller-manager.conf
-> 114:    name: kubeconfig
+> 13:    - --authentication-kubeconfig=/etc/kubernetes/controller-manager.conf
+> 14:    - --authorization-kubeconfig=/etc/kubernetes/controller-manager.conf
+> 22:    - --kubeconfig=/etc/kubernetes/controleur-manager.conf
+> 70:    - mountPath: /etc/kubernetes/controller-manager.conf
+> 71:      name: kubeconfig
+> 99:      path: /etc/kubernetes/controller-manager.conf
+> 101:    name: kubeconfig
 > ```
 >
-> (Les numéros de ligne varient d'une installation à l'autre.) Les options d'authentification et le volume `hostPath` désignent `controller-manager.conf`, le seul fichier monté dans le conteneur ; `--kubeconfig` vise un nom mal orthographié.
+> (Numéros de ligne du manifeste de minikube ; ils diffèrent sur un nœud kubeadm.) Les options d'authentification et le volume `hostPath` désignent `controller-manager.conf`, le seul fichier monté dans le conteneur ; `--kubeconfig` vise un nom mal orthographié.
 >
 > ```bash
 > sudo cp /etc/kubernetes/manifests/kube-controller-manager.yaml /root/kcm.yaml.avant
 > sudo sed -i 's#--kubeconfig=/etc/kubernetes/controleur-manager.conf#--kubeconfig=/etc/kubernetes/controller-manager.conf#' /etc/kubernetes/manifests/kube-controller-manager.yaml
-> sudo crictl ps --name kube-controller-manager
+> sudo crictl ps --name kube-controller-manager   # relancer jusqu'à voir le conteneur Running
 > exit
 > kubectl -n boutique get deploy front
 > kubectl -n boutique scale deployment front --replicas=3
 > ```
 >
-> Dès son redémarrage, le controller-manager rattrape tout le travail en attente : le quatrième pod `front` apparaît, puis disparaît au retour à 3.
+> Dès son redémarrage, le controller-manager rattrape tout le travail en attente : le quatrième pod `front` apparaît (`4/4` une vingtaine de secondes après la correction, 19 s mesurées), puis disparaît au retour à 3.
 >
 > **Vérification** : `kubectl -n boutique get deploy front` affiche `3/3`, le pod `kube-controller-manager-cka` est `1/1 Running`, et `lab/pannes.sh verifier 12` réussit.
 
@@ -550,6 +548,7 @@ Lance `lab/pannes.sh casser 13`. Le nœud `cka-m03` passe `NotReady`. Mesure le 
 >
 > ```
 > cka-m03   NotReady   <none>   5h    v1.37.0
+> NetworkUnavailable=False CalicoIsUp: Calico is running on this node
 > MemoryPressure=Unknown NodeStatusUnknown: Kubelet stopped posting node status.
 > DiskPressure=Unknown NodeStatusUnknown: Kubelet stopped posting node status.
 > PIDPressure=Unknown NodeStatusUnknown: Kubelet stopped posting node status.
@@ -558,7 +557,7 @@ Lance `lab/pannes.sh casser 13`. Le nœud `cka-m03` passe `NotReady`. Mesure le 
 > node.kubernetes.io/unreachable:NoExecute
 > ```
 >
-> Le passage à `NotReady` survient une cinquantaine de secondes après l'arrêt : c'est la période de grâce du contrôleur des nœuds. `Unknown` signifie que le kubelet ne donne plus de nouvelles, et sa Lease n'est plus renouvelée. On va sur le nœud :
+> Le passage à `NotReady` survient une cinquantaine de secondes après l'arrêt (51 s mesurées) : c'est la période de grâce du contrôleur des nœuds. Les quatre conditions du kubelet passent à `Unknown`, ce qui signifie que le kubelet ne donne plus de nouvelles, et sa Lease n'est plus renouvelée ; `NetworkUnavailable`, posée par Calico, ne change pas. On va sur le nœud :
 >
 > ```bash
 > minikube -p cka ssh -n cka-m03
@@ -570,10 +569,10 @@ Lance `lab/pannes.sh casser 13`. Le nœud `cka-m03` passe `NotReady`. Mesure le 
 >      Loaded: loaded (/lib/systemd/system/kubelet.service; disabled; preset: enabled)
 >     Drop-In: /etc/systemd/system/kubelet.service.d
 >              └─10-kubeadm.conf
->      Active: inactive (dead) since Fri 2026-10-23 18:21:40 UTC; 3min 12s ago
+>      Active: inactive (dead)
 > ```
 >
-> Le kubelet est arrêté **et** désactivé (`disabled` sur un worker, alors qu'il y est normalement `enabled`). Un simple `start` réparerait jusqu'au prochain redémarrage du nœud ; `enable --now` répare les deux :
+> Le kubelet est arrêté **et** désactivé (`disabled` sur un worker, alors qu'il y est normalement `enabled`). La ligne `Active:` ne dit pas depuis quand : systemd décharge de sa mémoire une unité désactivée et arrêtée, et la recharge sans historique au `status` suivant ; la date de l'arrêt se lit dans `sudo journalctl -u kubelet -n 5`. Un simple `start` réparerait jusqu'au prochain redémarrage du nœud ; `enable --now` répare les deux :
 >
 > ```bash
 > sudo systemctl enable --now kubelet
@@ -582,7 +581,7 @@ Lance `lab/pannes.sh casser 13`. Le nœud `cka-m03` passe `NotReady`. Mesure le 
 > kubectl get node cka-m03
 > ```
 >
-> Le nœud repasse `Ready` en une seconde et les taints `unreachable` disparaissent. Si plus de cinq minutes se sont écoulées, les pods du nœud ont été évincés : ceux des Deployments tournent ailleurs, `redis-0` est resté `Terminating` puis a été recréé sur `cka-m03` au retour du kubelet, et un pod nu comme `outils`, s'il était sur ce nœud, a disparu (`lab/etats/04-pods/appliquer.sh` le recrée).
+> Le nœud repasse `Ready` en une seconde ; les taints `unreachable` disparaissent quelques secondes plus tard, au passage suivant du contrôleur des nœuds (toutes les 5 s) : juste après le retour à `Ready`, la taint `unreachable:NoExecute` peut encore figurer dans `kubectl get node cka-m03 -o jsonpath='{.spec.taints}'`. Si plus de cinq minutes se sont écoulées, les pods du nœud ont été évincés : ceux des Deployments tournent ailleurs, `redis-0` est resté `Terminating` puis a été recréé sur `cka-m03` au retour du kubelet, et un pod nu comme `outils`, s'il était sur ce nœud, a disparu (`lab/etats/04-pods/appliquer.sh` le recrée).
 >
 > **Vérification** : `kubectl get node cka-m03` affiche `Ready`, et `lab/pannes.sh verifier 13` réussit.
 
@@ -596,11 +595,12 @@ Lance `lab/pannes.sh casser 14`. Le nœud `cka-m02` passe `NotReady`. Trouve la 
 > ```bash
 > kubectl get nodes
 > minikube -p cka ssh -n cka-m02
-> sudo systemctl status kubelet --no-pager | sed -n 3,7p
+> sudo systemctl status kubelet --no-pager | sed -n 5,8p
 > ```
 >
 > ```
 >      Active: activating (auto-restart) (Result: exit-code) since Fri 2026-10-23 18:40:02 UTC; 312ms ago
+>        Docs: http://kubernetes.io/docs/
 >     Process: 48211 ExecStart=/var/lib/minikube/binaries/v1.37.0/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --config=/var/lib/kubelet/config.yaml --hostname-override=cka-m02 --kubeconfig=/etc/kubernetes/kubelet.conf --node-ip=192.168.49.3 (code=exited, status=1/FAILURE)
 >    Main PID: 48211 (code=exited, status=1/FAILURE)
 > ```
@@ -669,7 +669,7 @@ Lance `lab/pannes.sh casser 15`. Une dizaine de secondes plus tard, `kubectl` n'
 > …
 > ```
 >
-> Le port est le bon (8443) et refuse la connexion : l'apiserver n'écoute plus. On passe sur le nœud :
+> Le port est le bon (8443) et refuse la connexion : l'apiserver n'écoute plus. Selon l'instant, kubectl peut aussi répondre `Unable to connect to the server: net/http: TLS handshake timeout` : c'est le cas pendant la vingtaine de secondes où un nouveau conteneur de l'apiserver tente sa chance avant de sortir (les deux messages ont alterné pendant la panne). On passe sur le nœud :
 >
 > ```bash
 > minikube -p cka ssh
@@ -688,10 +688,12 @@ Lance `lab/pannes.sh casser 15`. Une dizaine de secondes plus tard, `kubectl` n'
 > ```
 >
 > ```
-> W1023 18:52:31.481203       1 logging.go:55] [core] [Channel #3 SubChannel #5]grpc: addrConn.createTransport failed to connect to {Addr: "127.0.0.1:2380", ServerName: "127.0.0.1:2380", …}. Err: connection error: desc = "…"
+> W1023 18:52:41.309313       1 logging.go:55] [core] [Channel #5 SubChannel #6] grpc: addrConn.createTransport failed to connect to {Addr: "127.0.0.1:2380", ServerName: "127.0.0.1:2380", }. Err: connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:2380: connect: connection refused"
 > …
-> E1023 18:52:43.019887       1 run.go:72] "command failed" err="… context deadline exceeded"
+> E1023 18:52:43.019887       1 run.go:72] "command failed" err="error creating storage factory: etcd grpc connection not ready: context deadline exceeded"
 > ```
+>
+> (Si le conteneur est encore en vie au moment de la commande, les quatre lignes sont des tentatives `grpc` ; la ligne `command failed` arrive à sa sortie.)
 >
 > L'apiserver essaie de joindre etcd sur `127.0.0.1:2380` pendant une vingtaine de secondes, puis abandonne. Or 2380 est le port des **pairs** d'etcd ; les clients utilisent 2379. On le confirme en comparant les deux manifestes :
 >
@@ -706,7 +708,7 @@ Lance `lab/pannes.sh casser 15`. Une dizaine de secondes plus tard, `kubectl` n'
 >     - --listen-client-urls=https://127.0.0.1:2379,https://192.168.49.2:2379
 > ```
 >
-> etcd lui-même tourne normalement. Les mêmes lignes se lisent sans `crictl`, dans le fichier le plus récent de `/var/log/pods/kube-system_kube-apiserver-cka_*/kube-apiserver/` (`sudo ls -t /var/log/pods | grep apiserver` donne le dossier courant), et `sudo journalctl -u kubelet | grep kube-apiserver | tail -3` montre le kubelet en attente `CrashLoopBackOff` entre deux essais.
+> etcd lui-même tourne normalement. Les mêmes lignes se lisent sans `crictl`, dans le fichier le plus récent de `/var/log/pods/kube-system_kube-apiserver-cka_*/kube-apiserver/` (`sudo ls -t /var/log/pods | grep apiserver` donne le dossier courant), et `sudo journalctl -u kubelet | grep kube-apiserver | grep CrashLoopBackOff | tail -1` montre le kubelet en attente entre deux essais (`"Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-apiserver\" with CrashLoopBackOff: \"back-off 10s restarting failed container=kube-apiserver …`).
 >
 > ```bash
 > sudo cp /etc/kubernetes/manifests/kube-apiserver.yaml /root/kube-apiserver.yaml.avant
@@ -717,7 +719,7 @@ Lance `lab/pannes.sh casser 15`. Une dizaine de secondes plus tard, `kubectl` n'
 > kubectl get nodes
 > ```
 >
-> Le manifeste modifié produit un nouveau pod statique, dont le délai de redémarrage repart de zéro : l'apiserver revient en moins d'une minute, et `readyz` répond `ok`.
+> Le manifeste modifié produit un nouveau pod statique, dont le délai de redémarrage repart de zéro : l'apiserver revient en moins d'une minute (20 s mesurées), et `readyz` répond `ok`. Pendant son démarrage, le même `curl` affiche la liste des contrôles (`[+]ping ok`, `[-]poststarthook/… failed: reason withheld`…) suivie de `readyz check failed` : relance-le.
 >
 > **Vérification** : `kubectl get --raw /readyz` affiche `ok`, et `lab/pannes.sh verifier 15` réussit (il contrôle aussi qu'aucune copie n'est restée dans le dossier des manifestes).
 
@@ -725,7 +727,7 @@ Lance `lab/pannes.sh casser 15`. Une dizaine de secondes plus tard, `kubectl` n'
 
 **Point de départ** : exercice 23.5, ou instantané I4.
 
-Lance `lab/pannes.sh casser 16`. Plus aucune résolution DNS ne fonctionne dans le cluster, y compris depuis `outils`. Trouve la cause et répare sans perdre les entrées `boutique.example` ajoutées au chapitre 11.
+Lance `lab/pannes.sh casser 16` (le script met une minute et demie environ à rendre la main). Plus aucune résolution DNS ne fonctionne dans le cluster, y compris depuis `outils`. Trouve la cause et répare sans perdre les entrées `boutique.example` ajoutées au chapitre 11.
 
 > [!example]- Solution
 > ```bash
@@ -735,6 +737,7 @@ Lance `lab/pannes.sh casser 16`. Plus aucune résolution DNS ne fonctionne dans 
 >
 > ```
 > ;; communications error to 10.96.0.10#53: connection refused
+> command terminated with exit code 9
 > NAME                       READY   STATUS             RESTARTS      AGE
 > coredns-7d4c9b8f6d-4mzq8   0/1     CrashLoopBackOff   3 (30s ago)   90s
 > coredns-7d4c9b8f6d-r7wkd   0/1     CrashLoopBackOff   3 (28s ago)   90s
@@ -748,8 +751,10 @@ Lance `lab/pannes.sh casser 16`. Plus aucune résolution DNS ne fonctionne dans 
 > ```
 >
 > ```
-> /etc/coredns/Corefile:… - Error during parsing: Unknown directive 'foward'
-> …:    foward . /etc/resolv.conf {
+> Found 2 pods, using pod/coredns-7d4c9b8f6d-4mzq8
+> maxprocs: Leaving GOMAXPROCS=8: CPU quota undefined
+> /etc/coredns/Corefile:19 - Error during parsing: Unknown directive 'foward'
+> 19:    foward . /etc/resolv.conf {
 > ```
 >
 > La directive `forward` est mal orthographiée. Les pods existants auraient gardé l'ancienne configuration grâce au plugin `reload`, mais ils ont été recréés, et CoreDNS refuse de démarrer sur un Corefile invalide. On corrige la ConfigMap sans toucher au reste (le bloc `hosts` avec `boutique.example`), puis on redémarre les pods plutôt que d'attendre leur prochain essai :
@@ -762,7 +767,7 @@ Lance `lab/pannes.sh casser 16`. Plus aucune résolution DNS ne fonctionne dans 
 > kubectl -n boutique exec outils -- dig +short api.boutique.svc.cluster.local boutique.example
 > ```
 >
-> `kubectl -n kube-system edit configmap coredns` conviendrait aussi ; le tube `get | sed | replace` a l'avantage d'être rejouable et de ne changer que le mot fautif.
+> `kubectl -n kube-system edit configmap coredns` conviendrait aussi ; le tube `get | sed | replace` a l'avantage d'être rejouable et de ne changer que le mot fautif. Un `dig` lancé dans la seconde qui suit la fin du `rollout status` peut encore être refusé (`connection refused`, code 9), le temps que kube-proxy remplace la règle `REJECT` par les nouveaux points d'accès : relance-le.
 >
 > **Vérification** : `dig` renvoie l'IP du Service `api` puis celle du nœud `cka`, `kubectl -n kube-system get deploy coredns` affiche `2/2`, et `lab/pannes.sh verifier 16` réussit.
 
@@ -793,20 +798,21 @@ Lance `lab/pannes.sh casser 17`. Les Services existants répondent, mais un Serv
 >
 > ```bash
 > kubectl -n kube-system get pods -l k8s-app=kube-proxy
-> kubectl -n kube-system logs $(kubectl -n kube-system get pods -l k8s-app=kube-proxy -o name | head -1) -p
+> kubectl -n kube-system logs $(kubectl -n kube-system get pods -l k8s-app=kube-proxy -o name | head -1)
 > minikube -p cka ssh -n cka-m02 -- 'sudo iptables-save -t nat | grep -c essai-proxy'
 > ```
 >
 > ```
-> NAME               READY   STATUS             RESTARTS      AGE
-> kube-proxy-5kq8w   0/1     CrashLoopBackOff   4 (45s ago)   2m
-> kube-proxy-n2x7c   0/1     CrashLoopBackOff   4 (41s ago)   2m
-> kube-proxy-v9d4t   0/1     CrashLoopBackOff   4 (44s ago)   2m
-> E1023 19:07:15.118734       1 run.go:72] "command failed" err="failed validate: KubeProxyConfiguration.Mode: Invalid value: \"iptable\": must be iptables, ipvs, nftables or blank (blank means the best-available proxy [currently iptables])"
+> NAME               READY   STATUS   RESTARTS      AGE
+> kube-proxy-5kq8w   0/1     Error    3 (32s ago)   48s
+> kube-proxy-n2x7c   0/1     Error    3 (35s ago)   48s
+> kube-proxy-v9d4t   0/1     Error    3 (35s ago)   48s
+> E1023 19:07:15.118734       1 run.go:72] "command failed" err="failed validate: KubeProxyConfiguration.Mode.ProxyMode: Invalid value: \"iptable\": must be iptables, ipvs, nftables or blank (blank means the best-available proxy [currently iptables])"
 > 0
+> ssh: Process exited with status 1
 > ```
 >
-> Le mode configuré, `iptable`, n'existe pas. On corrige la ConfigMap, puis on redémarre le DaemonSet, qui ne relit pas sa configuration à chaud :
+> Entre deux relances, les pods kube-proxy s'affichent ici `Error` plutôt que `CrashLoopBackOff` (le kubelet n'inscrit l'attente qu'en resynchronisant le pod, 22.2.4), et leur journal se lit **sans** `-p`, l'instance courante étant celle qui vient d'échouer (21.3.2 ; avec `-p`, kubectl répond `unable to retrieve container logs for containerd://…`). Le `0` du `grep -c` est suivi du code de sortie de `grep`, relayé par minikube. Le mode configuré, `iptable`, n'existe pas. On corrige la ConfigMap, puis on redémarre le DaemonSet, qui ne relit pas sa configuration à chaud :
 >
 > ```bash
 > kubectl -n kube-system get configmap kube-proxy -o yaml | sed 's/^\( *\)mode: iptable$/\1mode: iptables/' | kubectl replace -f -
@@ -816,7 +822,10 @@ Lance `lab/pannes.sh casser 17`. Les Services existants répondent, mais un Serv
 > kubectl -n boutique delete service essai-proxy
 > ```
 >
-> Au démarrage, kube-proxy resynchronise toutes les règles : `essai-proxy` répond `200`.
+> Au démarrage, kube-proxy resynchronise toutes les règles : `essai-proxy` répond `200`. Le `rollout status` rend la main dès que les nouveaux pods sont lancés ; si le `curl` qui suit expire, attends quelques secondes et relance-le.
+>
+> > [!warning] Deux kube-proxy sur trois qui ne repartent pas
+> > Sur un poste dont la limite inotify n'est pas relevée, les nouveaux pods kube-proxy de deux nœuds sortent en boucle avec `"command failed" err="failed complete: fsnotify watcher init: too many open files"` (constaté aux deux passages de cette panne dans le lab, limite à 128 ; une fois, l'un des deux est reparti seul au bout d'une minute), et `essai-proxy` reste injoignable depuis ces nœuds. La configuration n'y est pour rien : relève la limite (chapitre 1.6), ou, à défaut, `minikube -p cka stop` puis `minikube -p cka start`, après quoi kube-proxy obtient ses instances avant les autres conteneurs (annexe C.7.1).
 >
 > **Vérification** : `kubectl -n kube-system get ds kube-proxy` affiche 3 pods prêts, et `lab/pannes.sh verifier 17` réussit.
 
@@ -848,6 +857,8 @@ Lance `lab/pannes.sh casser 18`. Plus aucun pod applicatif ne tourne sur `cka-m0
 > Taints:             maintenance=oui:NoExecute
 >                     node.kubernetes.io/unschedulable:NoSchedule
 > Unschedulable:      true
+> Lease:
+>   HolderIdentity:  cka-m02
 > ```
 >
 > Deux mécanismes se cumulent. Le nœud est **cordonné** (`SchedulingDisabled`, taint `unschedulable:NoSchedule`) : plus rien n'y est placé. Il porte aussi une taint **`NoExecute`** posée à la main, `maintenance=oui`, qui a évincé tous les pods qui ne la tolèrent pas ; seuls restent les pods de DaemonSet qui tolèrent tout (`operator: Exists`). Les événements gardent la trace des évictions pendant une heure :
@@ -885,12 +896,16 @@ Lance `lab/pannes.sh casser 19`. `kubectl` échoue avec « connection refused »
 > ```
 >
 > ```
+> E1023 19:31:07.903830   41297 memcache.go:381] "Couldn't get current server API group list" err="Get \"https://192.168.49.2:6443/api?timeout=32s\": dial tcp 192.168.49.2:6443: connect: connection refused"
+> …
 > The connection to the server 192.168.49.2:6443 was refused - did you specify the right host or port?
 > cka
 > cka https://192.168.49.2:6443
 > 192.168.49.2
 > ok
 > ```
+>
+> (kubectl n'a pas encore de cache de découverte pour cette adresse : il tente cinq fois de lire la liste des API, d'où cinq lignes `memcache.go` avant le message final.)
 >
 > L'API est saine (`readyz` répond `ok` sur 8443, dans le nœud), l'adresse IP est la bonne, mais le kubeconfig vise le port **6443**, celui d'un cluster kubeadm, alors que l'apiserver du lab écoute sur 8443 : rien n'écoute sur 6443, d'où le refus. On corrige l'entrée du cluster `cka`, que partagent les contextes `cka`, `boutique` et `alice@cka` :
 >
@@ -925,7 +940,7 @@ Sans rien modifier, relève sur `cka-m02` : le fichier d'unité et le drop-in du
 > cat ~/cka/noeuds/cka-m02.txt
 > ```
 >
-> On y lit l'unité `/lib/systemd/system/kubelet.service` et le drop-in `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf` ; `enabled` pour le kubelet et `disabled` pour containerd (minikube démarre le runtime lui-même, ce qu'un nœud kubeadm ne fait pas) ; `staticPodPath: /etc/kubernetes/manifests` et `clientCAFile: /var/lib/minikube/certs/ca.crt` ; le serveur `https://control-plane.minikube.internal:8443`, nom résolu par `/etc/hosts` du nœud vers 192.168.49.2 ; un sujet `O=system:nodes, CN=system:node:cka-m02` et une expiration un an après la création du nœud ; le kubelet sur `*:10250` et `127.0.0.1:10248`, kube-proxy sur 10256 et 10249 ; `10-calico.conflist` ; une Lease renouvelée il y a moins de 10 secondes. Le certificat est décodé sur le poste, où `openssl` est disponible : le fichier `.pem` contient le certificat puis la clé, et `openssl x509` ne lit que le premier. `tr -d '\r'` retire les retours chariot qu'ajoute `minikube ssh`.
+> On y lit l'unité `/lib/systemd/system/kubelet.service` et le drop-in `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf` ; `enabled` pour le kubelet et `disabled` pour containerd (minikube démarre le runtime lui-même, ce qu'un nœud kubeadm ne fait pas) ; `staticPodPath: /etc/kubernetes/manifests` et `clientCAFile: /var/lib/minikube/certs/ca.crt` ; le serveur `https://control-plane.minikube.internal:8443`, nom résolu par `/etc/hosts` du nœud vers 192.168.49.2 ; un sujet `O=system:nodes, CN=system:node:cka-m02` et une expiration un an après la création du nœud ; le kubelet sur `*:10250` et `127.0.0.1:10248`, kube-proxy sur 10256 et 10249, plus un port de la plage NodePort (`0.0.0.0:30768` lors du relevé) : c'est le `healthCheckNodePort` du Service `LoadBalancer` d'Envoy Gateway, en `externalTrafficPolicy: Local`, que kube-proxy sert lui-même ; `10-calico.conflist`, à côté de `calico-kubeconfig`, de `cni.lock` et des configurations de pont que minikube a désactivées (suffixe `.mk_disabled`) ; une Lease renouvelée il y a moins de 10 secondes. Le certificat est décodé sur le poste, où `openssl` est disponible : le fichier `.pem` contient le certificat puis la clé, et `openssl x509` ne lit que le premier. `tr -d '\r'` retire les retours chariot qu'ajoute `minikube ssh`.
 >
 > **Vérification** : `grep -c . ~/cka/noeuds/cka-m02.txt` affiche au moins 10 lignes, et `grep -q 'CN=system:node:cka-m02' ~/cka/noeuds/cka-m02.txt && echo ok` affiche `ok`.
 
@@ -940,13 +955,13 @@ Fais comme si l'API était inaccessible depuis ton poste. Depuis le nœud `cka` 
 > minikube -p cka ssh
 > sudo crictl ps -a | grep -E 'NAME|kube-apiserver|kube-controller-manager|kube-scheduler|etcd'
 > sudo grep -H 'image:' /etc/kubernetes/manifests/*.yaml
-> D=$(sudo ls -td /var/log/pods/kube-system_kube-scheduler-cka_* | head -1)
+> D=$(sudo sh -c 'ls -td /var/log/pods/kube-system_kube-scheduler-cka_*' | head -1)
 > sudo sh -c "tail -n 1 \$(ls -t $D/kube-scheduler/*.log | head -1)"
 > curl -sk "https://localhost:8443/readyz?verbose" | tail -4
 > exit
 > ```
 >
-> `crictl ps -a` donne pour chaque conteneur l'état (`Running`) et la colonne `ATTEMPT` ; un composant sain a un `ATTEMPT` stable et aucun conteneur `Exited` récent. Les images sont `registry.k8s.io/kube-{apiserver,controller-manager,scheduler}:v1.37.0` et `registry.k8s.io/etcd:3.7.0-0`. La ligne de journal brute du scheduler commence par l'horodatage CRI et le flux (`stderr F`), suivis de l'en-tête klog. `readyz?verbose` liste chaque vérification (`[+]ping ok`, `[+]etcd ok`…) et se termine par `readyz check passed` ; ce point d'accès ne demande aucune authentification. Ces quatre commandes sont exactement celles d'un control plane dont l'API est tombée (exercice 23.5).
+> `crictl ps -a` donne pour chaque conteneur l'état (`Running`) et la colonne `ATTEMPT` ; un composant sain a un `ATTEMPT` stable et aucun conteneur `Exited` récent. Les images sont `registry.k8s.io/kube-{apiserver,controller-manager,scheduler}:v1.37.0` et `registry.k8s.io/etcd:3.7.0-0`. Le motif du dossier est développé par `sudo sh -c` : écrit `sudo ls -td /var/log/pods/…_*`, il le serait par le shell de l'utilisateur `docker`, qui ne lit pas `/var/log/pods` ; `D` resterait vide et le `tail` suivant attendrait indéfiniment sur l'entrée standard (21.2.2). La ligne de journal brute du scheduler commence par l'horodatage CRI et le flux (`stderr F`), suivis de l'en-tête klog. `readyz?verbose` liste chaque vérification (`[+]ping ok`, `[+]etcd ok`…) et se termine par `readyz check passed` ; ce point d'accès ne demande aucune authentification. Ces quatre commandes sont exactement celles d'un control plane dont l'API est tombée (exercice 23.5).
 >
 > **Vérification** : la dernière commande affiche `readyz check passed`.
 
@@ -965,6 +980,8 @@ Sur le nœud `cka`, copie le manifeste du scheduler en `kube-scheduler.yaml.bak`
 > sudo journalctl -u kubelet --since "1 min ago" --no-pager | grep -i 'mirror pod' | tail -3
 > sudo crictl ps -a --name kube-scheduler
 > sudo mv /etc/kubernetes/manifests/kube-scheduler.yaml.bak /root/
+> sleep 30
+> sudo crictl ps -a --name kube-scheduler
 > sudo cp /etc/kubernetes/manifests/kube-scheduler.yaml /etc/kubernetes/manifests/.kube-scheduler.yaml.bak
 > sleep 30
 > sudo crictl ps -a --name kube-scheduler
@@ -973,7 +990,7 @@ Sur le nœud `cka`, copie le manifeste du scheduler en `kube-scheduler.yaml.bak`
 > exit
 > ```
 >
-> Avec `kube-scheduler.yaml.bak`, le kubelet lit un second manifeste qui décrit un pod de même nom : il recrée le pod statique, le conteneur du scheduler redémarre (nouvelle ligne dans `crictl ps -a`), et le journal contient `Deleted mirror pod as it didn't match the static Pod`. Avec deux versions différentes du même pod, l'une ou l'autre peut l'emporter : c'est ainsi qu'une « réparation » se trouve annulée par une vieille copie. Avec `.kube-scheduler.yaml.bak`, rien ne se passe : le kubelet ignore les fichiers qui commencent par un point. La seule pratique sûre reste de sauvegarder hors du dossier.
+> Avec `kube-scheduler.yaml.bak`, le kubelet lit un second manifeste qui décrit un pod de même nom : il recrée le pod statique, le conteneur du scheduler redémarre (nouvelle ligne dans `crictl ps -a`, nouveau `POD ID`), et le journal contient `Deleted mirror pod as it didn't match the static Pod` puis `Creating a mirror pod for static pod`. Retirer la copie a le même effet : le scheduler redémarre encore une fois, d'où le `crictl ps -a` après le `mv`. Avec deux versions différentes du même pod, l'une ou l'autre peut l'emporter : c'est ainsi qu'une « réparation » se trouve annulée par une vieille copie. Avec `.kube-scheduler.yaml.bak`, rien ne se passe : le dernier `crictl ps -a` montre le même conteneur que le précédent, car le kubelet ignore les fichiers qui commencent par un point. La seule pratique sûre reste de sauvegarder hors du dossier.
 >
 > **Vérification** : `sudo ls -A /etc/kubernetes/manifests` dans le nœud ne liste que `etcd.yaml`, `kube-apiserver.yaml`, `kube-controller-manager.yaml` et `kube-scheduler.yaml`, et `kubectl -n kube-system get pods -l component=kube-scheduler` montre `1/1 Running`.
 

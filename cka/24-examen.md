@@ -174,7 +174,7 @@ Vérification, dans vim, sur un fichier `.yaml` : `:set et? sw? ts? mouse?` doit
 | `:wq` ou `ZZ`, `:q!` | enregistrer et quitter, quitter sans enregistrer |
 
 > [!warning] Quand kubectl edit refuse d'enregistrer
-> Si le YAML modifié par `kubectl edit` est invalide ou touche un champ immuable, kubectl rouvre l'éditeur avec l'erreur en commentaire en tête du fichier ; si tu quittes sans corriger, il enregistre ta version dans un fichier temporaire (`/tmp/kubectl-edit-….yaml`) et te donne son chemin. Pour un champ immuable (le sélecteur d'un Deployment, la plupart des champs d'un pod), applique ce fichier par `kubectl replace --force -f /tmp/kubectl-edit-….yaml` : l'objet est supprimé puis recréé (chapitre 3).
+> Si le YAML modifié par `kubectl edit` est invalide ou touche un champ immuable, kubectl rouvre l'éditeur avec l'erreur en commentaire en tête du fichier ; si tu quittes sans corriger, il enregistre ta version dans un fichier temporaire (`/tmp/kubectl-edit-….yaml`) et te donne son chemin. Pour un champ immuable (le sélecteur d'un Deployment, la plupart des champs d'un pod), applique ce fichier par `kubectl replace --force -f /tmp/kubectl-edit-….yaml` : l'objet est supprimé puis recréé (chapitre 3.7).
 
 ### 24.4 La stratégie de temps
 
@@ -337,12 +337,12 @@ Les erreurs qui coûtent des points au CKA sont rarement des erreurs de connaiss
 
 **La réparation à chaud.** Modifier un pod géré par un Deployment (il sera remplacé), démarrer un service sans l'activer (il ne reviendra pas au redémarrage), corriger un pod statique par `kubectl edit` sur son pod miroir (le kubelet le recrée depuis le manifeste du disque) : autant de corrections qui ne tiennent pas. On corrige toujours la source : le Deployment, l'unité systemd (`enable --now`), le fichier de `/etc/kubernetes/manifests`.
 
-**La copie de sauvegarde au mauvais endroit.** Avant de modifier un manifeste statique, on le sauvegarde, mais **hors** de `/etc/kubernetes/manifests` : le kubelet charge tous les fichiers de ce dossier, quel que soit leur suffixe, et une copie `.bak` y crée un second pod statique (chapitres 2 et 23).
+**La copie de sauvegarde au mauvais endroit.** Avant de modifier un manifeste statique, on le sauvegarde, mais **hors** de `/etc/kubernetes/manifests` : le kubelet charge tous les fichiers de ce dossier, quel que soit leur suffixe, et une copie `.bak` y crée un second pod statique (chapitres 2.5 et 23.4.1).
 
-**Attendre ce qui ne viendra pas.** Après la modification d'un manifeste du control plane, le kubelet met de quelques secondes à une minute pour relancer le composant. Pendant ce temps, `kubectl` peut échouer. Ne modifie pas le fichier une seconde fois par impatience : surveille plutôt `sudo crictl ps -a --name kube-apiserver` et lis `/var/log/pods` si le conteneur ne revient pas (chapitre 23).
+**Attendre ce qui ne viendra pas.** Après la modification d'un manifeste du control plane, le kubelet met de quelques secondes à une minute pour relancer le composant. Pendant ce temps, `kubectl` peut échouer. Ne modifie pas le fichier une seconde fois par impatience : surveille plutôt `sudo crictl ps -a --name kube-apiserver` et lis `/var/log/pods` si le conteneur ne revient pas (chapitre 23.4.3).
 
 > [!info] minikube ≠ examen : t'entraîner aux gestes de l'examen
-> Le lab remplace `ssh <nœud>` par `minikube -p cka ssh -n <nœud>`, et l'utilisateur `docker` y a un `sudo` sans mot de passe, comme le candidat de l'examen. Pour t'entraîner aux bons réflexes, travaille dans le lab comme à l'examen : entre dans le nœud en interactif, utilise `sudo` commande par commande ou `sudo -i`, et sors par `exit`. Rappelle-toi seulement les chemins propres au lab (`/var/lib/minikube/certs`, `/var/lib/minikube/etcd`, port 8443) et leurs équivalents d'examen (`/etc/kubernetes/pki`, `/var/lib/etcd`, port 6443).
+> Le lab remplace `ssh <nœud>` par `minikube -p cka ssh -n <nœud>`, et l'utilisateur `docker` y a un `sudo` sans mot de passe, comme le candidat de l'examen. Pour t'entraîner aux bons réflexes, travaille dans le lab comme à l'examen : entre dans le nœud en interactif, utilise `sudo` commande par commande ou `sudo -i`, et sors par `exit`. Rappelle-toi seulement les chemins propres au lab (`/var/lib/minikube/certs`, `/var/lib/minikube/etcd`, devenu `/var/lib/minikube/etcd-restore` après l'exercice 20.5 alors qu'un `lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`, port 8443) et leurs équivalents d'examen (`/etc/kubernetes/pki`, `/var/lib/etcd`, port 6443).
 
 ### 24.7 Les pages de documentation à connaître
 
@@ -442,7 +442,7 @@ Chercher une page dans un Firefox distant coûte du temps ; savoir où elle est 
 | https://helm.sh/docs/intro/using_helm/ | `helm repo add`, `install`, `upgrade`, `rollback`, `--set` |
 | https://helm.sh/docs/helm/helm_install/ et https://helm.sh/docs/helm/helm_upgrade/ | toutes les options |
 
-La politique de décalage des versions (*Version Skew Policy*) est publiée à l'adresse https://kubernetes.io/releases/version-skew-policy/, **hors** de `/docs` : elle ne fait pas partie des adresses autorisées. Les règles utiles à une mise à jour sont rappelées dans la page de mise à jour kubeadm, et le chapitre 19 te les fait apprendre.
+La politique de décalage des versions (*Version Skew Policy*) est publiée à l'adresse https://kubernetes.io/releases/version-skew-policy/, **hors** de `/docs` : elle ne fait pas partie des adresses autorisées. Les règles utiles à une mise à jour sont rappelées dans la page de mise à jour kubeadm, et le chapitre 19.5 te les fait apprendre.
 
 #### Troubleshooting (30 %)
 
@@ -710,7 +710,7 @@ Note-toi sur 26 points. Seuil de confort : 20 points en vingt minutes. En dessou
 > curl -s http://$(minikube -p cka ip):30180/hostname; echo
 > ```
 >
-> L'EndpointSlice liste deux adresses de pods ; `curl` affiche le nom d'un des pods `echo-…` (relance-le : le nom change d'un appel à l'autre au gré de la répartition).
+> L'EndpointSlice liste deux adresses de pods ; `curl` affiche le nom d'un des pods `echo-…` (relance-le : le nom peut changer d'un appel à l'autre au gré de la répartition). Lancé dans la seconde qui suit la création du Service, le premier `curl` peut ne rien afficher (un échec, que `-s` rend muet) : kube-proxy n'a pas encore programmé le NodePort ; relance-le.
 >
 > **T4** (cible : 4 minutes). Le manifeste s'inspire de la page « Configure a Pod to Use a PersistentVolume for Storage » ; enregistre-le dans `~/cka/chrono/t4.yaml` (par exemple en le collant dans `cat > ~/cka/chrono/t4.yaml <<'EOF'` … `EOF`) :
 >
@@ -751,7 +751,7 @@ Note-toi sur 26 points. Seuil de confort : 20 points en vingt minutes. En dessou
 > kubectl -n chrono wait --for=condition=Ready pod/ecrivain --timeout=2m
 > ```
 >
-> La StorageClass `rapide` est en `WaitForFirstConsumer` (chapitre 15) : la PVC reste `Pending` tant que le pod n'est pas planifié, puis le pilote CSI crée le volume sur le nœud choisi. Un `Pending` juste après la création de la seule PVC n'est donc pas une erreur ; il le devient si le pod est lui-même planifié et que la PVC ne se lie toujours pas.
+> La StorageClass `rapide` est en `WaitForFirstConsumer` (chapitre 15.6) : la PVC reste `Pending` tant que le pod n'est pas planifié, puis le pilote CSI crée le volume sur le nœud choisi. Un `Pending` juste après la création de la seule PVC n'est donc pas une erreur ; il le devient si le pod est lui-même planifié et que la PVC ne se lie toujours pas.
 >
 > **Vérification** :
 >
@@ -775,7 +775,7 @@ Note-toi sur 26 points. Seuil de confort : 20 points en vingt minutes. En dessou
 > exit
 > ```
 >
-> Trois pièges en une tâche. Sur le lab, `kubeadm` est hors du `PATH` et sa commande échoue sans `--cert-dir` (ou `--config /var/tmp/minikube/kubeadm.yaml`), parce qu'elle cherche `/etc/kubernetes/pki/ca.crt` (chapitre 19) ; sur un cluster d'examen, `sudo kubeadm certs check-expiration` suffit. `/opt` appartient à root : `mkdir` exige `sudo`, et l'écriture passe par `sudo tee`, car un `sudo … > /opt/chrono/t5.txt` ferait la redirection avec tes droits. Enfin `grep '^apiserver '`, avec l'espace, isole la ligne `apiserver` des lignes `apiserver-etcd-client` et `apiserver-kubelet-client` ; `awk` fait de même en comparant le premier champ.
+> Trois pièges en une tâche. Sur le lab, `kubeadm` est hors du `PATH` et sa commande échoue sans `--cert-dir` (ou `--config /var/tmp/minikube/kubeadm.yaml`), parce qu'elle cherche `/etc/kubernetes/pki/ca.crt` (chapitre 19.7.1) ; sur un cluster d'examen, `sudo kubeadm certs check-expiration` suffit. `/opt` appartient à root : `mkdir` exige `sudo`, et l'écriture passe par `sudo tee`, car un `sudo … > /opt/chrono/t5.txt` ferait la redirection avec tes droits. Enfin `grep '^apiserver '`, avec l'espace, isole la ligne `apiserver` des lignes `apiserver-etcd-client` et `apiserver-kubelet-client` ; `awk` fait de même en comparant le premier champ.
 >
 > **Vérification** : `minikube -p cka ssh -- sudo cat /opt/chrono/t5.txt` affiche une date de la forme `Oct 22, 2029 18:16 UTC`, 26 280 heures (1 095 jours) après la création de ton cluster : le certificat `apiserver` du lab est émis pour 3 ans par minikube, contre 1 an sous kubeadm.
 >

@@ -11,7 +11,7 @@ Tout ce que Kubernetes exécute finit dans un pod. Les Deployments, les DaemonSe
 
 ### 4.1 Le pod, plus petite unité déployable
 
-Un pod est un groupe d'un ou plusieurs conteneurs que Kubernetes planifie **ensemble**, sur **un seul** nœud, et qui partagent un contexte d'exécution. Ce contexte, c'est d'abord un ensemble d'espaces de noms Linux. Quand le kubelet reçoit un pod, il demande au runtime (containerd dans le lab, par l'interface CRI) de créer un *bac à sable* (*sandbox*) : sous containerd, c'est un petit conteneur `pause` (image `registry.k8s.io/pause:3.10.2` dans le lab) qui ne fait rien d'autre que détenir les espaces de noms réseau, IPC et UTS. Le plugin CNI configure ensuite le réseau de ce bac à sable ([chapitre 9](09-reseau-des-pods.md)), puis chaque conteneur du pod est démarré *dans* ces espaces de noms. Il en découle les propriétés qui font l'intérêt du pod : une seule adresse IP pour tous ses conteneurs, un seul espace de ports (deux conteneurs ne peuvent pas écouter le même port), une communication possible par `localhost`, un même nom d'hôte. Les volumes sont déclarés au niveau du pod et montés dans les conteneurs qui le demandent. L'espace de noms PID, lui, reste séparé par défaut : chaque conteneur a son propre PID 1, sauf si tu poses `shareProcessNamespace: true`.
+Un pod est un groupe d'un ou plusieurs conteneurs que Kubernetes planifie **ensemble**, sur **un seul** nœud, et qui partagent un contexte d'exécution. Ce contexte, c'est d'abord un ensemble d'espaces de noms Linux. Quand le kubelet reçoit un pod, il demande au runtime (containerd dans le lab, par l'interface CRI) de créer un *bac à sable* (*sandbox*) : sous containerd, c'est un petit conteneur `pause` (image `registry.k8s.io/pause:3.10.2` dans le lab) qui ne fait rien d'autre que détenir les espaces de noms réseau, IPC et UTS. Le plugin CNI configure ensuite le réseau de ce bac à sable ([chapitre 9.2](09-reseau-des-pods.md)), puis chaque conteneur du pod est démarré *dans* ces espaces de noms. Il en découle les propriétés qui font l'intérêt du pod : une seule adresse IP pour tous ses conteneurs, un seul espace de ports (deux conteneurs ne peuvent pas écouter le même port), une communication possible par `localhost`, un même nom d'hôte. Les volumes sont déclarés au niveau du pod et montés dans les conteneurs qui le demandent. L'espace de noms PID, lui, reste séparé par défaut : chaque conteneur a son propre PID 1, sauf si tu poses `shareProcessNamespace: true`.
 
 ```
 UN POD VU DU NŒUD
@@ -44,10 +44,10 @@ The Pod "outils" is invalid: spec: Forbidden: pod updates may not change fields 
 (allow it to be set to 1 if it was previously negative)
 ```
 
-Les ressources CPU et mémoire font exception, mais par une porte dédiée, la sous-ressource `resize` (section 4.12) ; les conteneurs éphémères passent eux aussi par une sous-ressource (section 4.11). Pour tout le reste (une sonde, une variable, un volume), on supprime et on recrée : `kubectl replace --force -f pod.yaml` fait les deux en une commande ([chapitre 3](03-kubectl-efficace.md)).
+Les ressources CPU et mémoire font exception, mais par une porte dédiée, la sous-ressource `resize` (section 4.12) ; les conteneurs éphémères passent eux aussi par une sous-ressource (section 4.11). Pour tout le reste (une sonde, une variable, un volume), on supprime et on recrée : `kubectl replace --force -f pod.yaml` fait les deux en une commande ([chapitre 3.7.4](03-kubectl-efficace.md)).
 
 > [!note]
-> Un pod statique, lu par le kubelet dans `/etc/kubernetes/manifests` ([chapitre 2](02-architecture.md)), est un pod comme les autres du point de vue du conteneur, mais son objet dans l'API n'est qu'un miroir. Depuis Kubernetes 1.37, la porte `PreventStaticPodAPIReferences` est supprimée : un pod statique ne peut plus référencer ni ConfigMap ni Secret, sans retour possible. Il ne peut pas non plus être redimensionné en place (`static pods cannot be resized`).
+> Un pod statique, lu par le kubelet dans `/etc/kubernetes/manifests` ([chapitre 2.5](02-architecture.md)), est un pod comme les autres du point de vue du conteneur, mais son objet dans l'API n'est qu'un miroir. Depuis Kubernetes 1.37, la porte `PreventStaticPodAPIReferences` est supprimée : un pod statique ne peut plus référencer ni ConfigMap ni Secret, sans retour possible. Il ne peut pas non plus être redimensionné en place (`static pods cannot be resized`).
 
 ### 4.2 Écrire un pod vite
 
@@ -82,8 +82,8 @@ Les valeurs par défaut d'un pod, que le serveur d'API remplit si tu ne dis rien
 |---|---|---|
 | `restartPolicy` | `Always` | seule valeur permise dans un Deployment ; Job : `OnFailure` ou `Never` |
 | `terminationGracePeriodSeconds` | `30` | délai entre le signal d'arrêt et `SIGKILL` (4.13) |
-| `dnsPolicy` | `ClusterFirst` | résolution par CoreDNS ([chapitre 11](11-coredns.md)) |
-| `serviceAccountName` | `default` | jeton monté automatiquement ([chapitre 16](16-rbac-et-authentification.md)) |
+| `dnsPolicy` | `ClusterFirst` | résolution par CoreDNS ([chapitre 11.7](11-coredns.md)) |
+| `serviceAccountName` | `default` | jeton monté automatiquement ([chapitre 16.9](16-rbac-et-authentification.md)) |
 | `enableServiceLinks` | `true` | variables `<SERVICE>_SERVICE_HOST` injectées pour chaque Service du namespace |
 | `containers[].imagePullPolicy` | `Always` si l'étiquette est `latest` ou absente, sinon `IfNotPresent` | fixé à la création, jamais recalculé |
 | `containers[].terminationMessagePolicy` | `File` | `FallbackToLogsOnError` utile au débogage |
@@ -105,7 +105,7 @@ Une image définit deux choses : un `ENTRYPOINT` (l'exécutable) et un `CMD` (se
 
 La troisième ligne est le piège classique : poser un `command` efface aussi les arguments par défaut de l'image, même si tu ne voulais changer que l'exécutable. Le Deployment `api` du fil rouge utilise la deuxième ligne : `args: ["netexec", "--http-port=8080"]` garde l'`ENTRYPOINT` `/agnhost` de l'image. À l'inverse, `nicolaka/netshoot` et `busybox` n'ont pas d'`ENTRYPOINT` (seulement `CMD ["zsh"]` et `CMD ["sh"]`) : pour elles, `command` et `args` reviennent au même.
 
-Ni `command` ni `args` ne passent par un shell. Pas de redirection, pas de tube, pas de `$VAR` interprété : `command: ["echo", "$HOME"]` affiche littéralement `$HOME`. Quand il faut un shell, on l'appelle explicitement, `command: ["sh", "-c", "…"]`. Kubernetes applique en revanche sa propre substitution, avec la syntaxe `$(NOM)` : dans `command`, `args` et la valeur d'une variable `env`, `$(NOM)` est remplacé par la variable d'environnement `NOM` du conteneur si elle est **déjà définie** (plus haut dans la liste `env`, ou par `envFrom`). Une référence inconnue reste telle quelle, et `$$(NOM)` produit le texte littéral `$(NOM)`. Cette règle a une conséquence que peu de candidats voient venir : dans `sh -c "echo $(date)"`, Kubernetes cherche une variable nommée `date`, ne la trouve pas, laisse le texte intact, et c'est le shell qui exécute ensuite la substitution de commande. Le DaemonSet `agent-noeud` du [chapitre 5](05-deployments-et-controleurs.md) fonctionne ainsi ; il cesserait de fonctionner le jour où une variable `date` serait définie dans le conteneur.
+Ni `command` ni `args` ne passent par un shell. Pas de redirection, pas de tube, pas de `$VAR` interprété : `command: ["echo", "$HOME"]` affiche littéralement `$HOME`. Quand il faut un shell, on l'appelle explicitement, `command: ["sh", "-c", "…"]`. Kubernetes applique en revanche sa propre substitution, avec la syntaxe `$(NOM)` : dans `command`, `args` et la valeur d'une variable `env`, `$(NOM)` est remplacé par la variable d'environnement `NOM` du conteneur si elle est **déjà définie** (plus haut dans la liste `env`, ou par `envFrom`). Une référence inconnue reste telle quelle, et `$$(NOM)` produit le texte littéral `$(NOM)`. Cette règle a une conséquence que peu de candidats voient venir : dans `sh -c "echo $(date)"`, Kubernetes cherche une variable nommée `date`, ne la trouve pas, laisse le texte intact, et c'est le shell qui exécute ensuite la substitution de commande. Le DaemonSet `agent-noeud` de l'[exercice 5.5](05-deployments-et-controleurs.md) fonctionne ainsi ; il cesserait de fonctionner le jour où une variable `date` serait définie dans le conteneur.
 
 Les variables d'environnement viennent de trois sources. `env` les liste une à une, avec une valeur littérale (`value`) ou une référence (`valueFrom`) : une clé de ConfigMap ou de Secret ([chapitre 6](06-configmaps-et-secrets.md)), un champ du pod (`fieldRef`, par exemple `spec.nodeName` ou `status.podIP`), une ressource du conteneur (`resourceFieldRef`). `envFrom` importe d'un coup toutes les clés d'une ConfigMap ou d'un Secret, avec un `prefix` optionnel. Enfin l'image apporte ses propres `ENV`. En cas de doublon, `env` l'emporte sur `envFrom`, qui l'emporte sur l'image ; entre deux sources d'`envFrom`, la dernière gagne. Depuis 1.34, un nom de variable peut contenir n'importe quel caractère ASCII imprimable sauf `=`.
 
@@ -161,7 +161,7 @@ La colonne `STATUS` de `kubectl get pods` n'est **aucune** de ces trois choses :
 | `PodInitializing` | init terminés, conteneurs principaux en création | |
 | `Running` | au moins un conteneur tourne ; la colonne `READY` dit s'il est prêt | |
 | `Completed` | phase `Succeeded` | |
-| `Error` | conteneur terminé avec un code non nul, sans redémarrage | `kubectl logs` |
+| `Error` | conteneur terminé avec un code non nul, sans redémarrage, ou en attente de relance tant que le kubelet n'a pas inscrit `CrashLoopBackOff` | `kubectl logs` |
 | `CrashLoopBackOff` | le conteneur plante en boucle, le kubelet attend avant de le relancer | `kubectl logs --previous` |
 | `ErrImagePull`, `ImagePullBackOff` | image introuvable ou registre inaccessible | événements `Failed` |
 | `CreateContainerConfigError` | ConfigMap, Secret ou clé manquants, ou `runAsNonRoot` violé | `kubectl describe pod` |
@@ -181,7 +181,7 @@ CYCLE DE VIE D'UN POD (cas nominal)
  fin : tous les conteneurs terminés, pas de redémarrage ─▶ Succeeded (tous 0) ou Failed
 ```
 
-Les trois niveaux se lisent en une commande grâce à jsonpath ([chapitre 3](03-kubectl-efficace.md)) :
+Les trois niveaux se lisent en une commande grâce à jsonpath ([chapitre 3.5.2](03-kubectl-efficace.md)) :
 
 ```bash
 kubectl -n boutique get pod outils -o jsonpath='{.status.phase}{"\n"}'
@@ -201,9 +201,9 @@ Quand un conteneur s'arrête, c'est le **kubelet**, sur le nœud, qui décide de
 | 0 | redémarre | ne redémarre pas | ne redémarre pas | redémarre toujours |
 | non nul (ou tué) | redémarre | redémarre | ne redémarre pas | redémarre toujours |
 
-Les redémarrages successifs sont espacés par un délai exponentiel : 10 s, 20 s, 40 s, et ainsi de suite jusqu'à un plafond de 300 s (5 minutes). Pendant l'attente, kubectl affiche `CrashLoopBackOff`. Un conteneur qui a tourné 10 minutes sans incident voit son délai remis à zéro. Le plafond se règle par nœud depuis la 1.35 (porte `KubeletCrashLoopBackOffMax`, bêta active) avec `crashLoopBackOff.maxContainerRestartPeriod` dans la configuration du kubelet, entre `1s` et `300s`.
+Les redémarrages successifs sont espacés par un délai exponentiel : 10 s, 20 s, 40 s, et ainsi de suite jusqu'à un plafond de 300 s (5 minutes). Pendant l'attente, kubectl affiche `CrashLoopBackOff`, ou `Error` tant que le kubelet n'a pas resynchronisé le pod (22.2.4). Un conteneur qui a tourné 10 minutes sans incident voit son délai remis à zéro. Le plafond se règle par nœud depuis la 1.35 (porte `KubeletCrashLoopBackOffMax`, bêta active) avec `crashLoopBackOff.maxContainerRestartPeriod` dans la configuration du kubelet, entre `1s` et `300s`.
 
-Le journal du conteneur précédent, celui qui a planté, reste accessible tant que le conteneur suivant n'a pas lui-même été remplacé : `kubectl logs <pod> --previous` (ou `-p`). C'est le premier réflexe devant un `CrashLoopBackOff`, car les journaux du conteneur courant sont souvent vides.
+Une fois le conteneur relancé, le journal de l'instance qui a planté reste accessible tant que la nouvelle instance n'a pas elle-même été remplacée : `kubectl logs <pod> --previous` (ou `-p`). C'est le premier réflexe devant un `CrashLoopBackOff`, car les journaux du conteneur courant sont souvent vides. Pendant l'attente entre deux relances, en revanche, l'instance « courante » est celle qui vient d'échouer, la seule terminée que le kubelet garde : `-p` répond alors `unable to retrieve container logs for containerd://<id>`, et c'est `kubectl logs <pod>` **sans** `-p` qui affiche son journal (21.3.2).
 
 Depuis 1.35, la porte `ContainerRestartRules` (bêta, active par défaut) permet de poser une politique **par conteneur** : un champ `restartPolicy` sur un conteneur principal ou un init container classique, complété de règles `restartPolicyRules` qui redémarrent seulement sur certains codes de sortie. Dans un pod en `restartPolicy: Never`, un conteneur qui porte `restartPolicy: Never` et la règle `{action: Restart, exitCodes: {operator: In, values: [42]}}` est relancé chaque fois qu'il sort avec le code 42, et seulement dans ce cas ; c'est utile pour un traitement dont un code signifie « réessaie » et un autre « inutile d'insister ». Si `restartPolicyRules` est présent, `restartPolicy` doit l'être aussi sur le conteneur.
 
@@ -228,7 +228,7 @@ Pour une limit CPU de `200m`, le fichier `/sys/fs/cgroup/cpu.max` du conteneur c
 > [!danger] Le `m` de la mémoire
 > `memory: 400m` est accepté par l'API et signifie 0,4 **octet** (le suffixe `m` veut dire « milli »). Le conteneur ne démarre pas, ou est tué aussitôt. Pour la mémoire, écris toujours `Mi` ou `Gi`. Note aussi que `M` (10⁶) et `Mi` (2²⁰) diffèrent de presque 5 %.
 
-Si un conteneur déclare une limit sans request pour une ressource, et qu'aucun mécanisme d'admission (une LimitRange, [chapitre 8](08-ordonnancement-et-admission.md)) n'a fixé de request, **la request prend la valeur de la limit**. L'inverse n'est pas vrai : une request sans limit laisse le conteneur consommer jusqu'à la capacité du nœud.
+Si un conteneur déclare une limit sans request pour une ressource, et qu'aucun mécanisme d'admission (une LimitRange, [chapitre 8.11](08-ordonnancement-et-admission.md)) n'a fixé de request, **la request prend la valeur de la limit**. L'inverse n'est pas vrai : une request sans limit laisse le conteneur consommer jusqu'à la capacité du nœud.
 
 > [!info] minikube ≠ examen
 > Dans le lab, chaque nœud annonce la capacité de l'**hôte** (8 CPU et 32 Gio sur le poste de référence), pas celle de son conteneur Docker (3 Gio de mémoire réelle). Le scheduler croit donc disposer de bien plus que ce qui existe, et un pod qui demande 4 Gio est placé sans difficulté avant d'échouer à l'exécution. Sur un cluster kubeadm d'examen, la capacité est celle de la machine virtuelle, et un excès de requests laisse le pod en `Pending` avec `Insufficient memory`.
@@ -279,7 +279,7 @@ La classe est figée à la création : un redimensionnement en place qui la chan
 
 #### Init containers, sidecars et ressources effectives
 
-Les init containers classiques s'exécutent l'un après l'autre, avant les conteneurs principaux ; les sidecars tournent en même temps qu'eux. Le scheduler raisonne donc sur une request **effective** du pod : la plus grande request parmi les init containers d'un côté, la somme des conteneurs principaux et des sidecars de l'autre, et il retient le maximum des deux (plus l'éventuel *overhead* de la RuntimeClass). Un init container qui demande 2 Gio pour une migration réserve ces 2 Gio sur le nœud, même si les conteneurs principaux n'en demandent que 128 Mio. Les quotas ([chapitre 8](08-ordonnancement-et-admission.md)) comptent aussi ces valeurs effectives.
+Les init containers classiques s'exécutent l'un après l'autre, avant les conteneurs principaux ; les sidecars tournent en même temps qu'eux. Le scheduler raisonne donc sur une request **effective** du pod : la plus grande request parmi les init containers d'un côté, la somme des conteneurs principaux et des sidecars de l'autre, et il retient le maximum des deux (plus l'éventuel *overhead* de la RuntimeClass). Un init container qui demande 2 Gio pour une migration réserve ces 2 Gio sur le nœud, même si les conteneurs principaux n'en demandent que 128 Mio. Les quotas ([chapitre 8.10](08-ordonnancement-et-admission.md)) comptent aussi ces valeurs effectives.
 
 > [!note]
 > Les ressources au niveau du pod (`spec.resources`, porte `PodLevelResources`) sont en **bêta**, actives par défaut depuis 1.34 : on peut fixer un budget CPU et mémoire pour le pod entier, que ses conteneurs se partagent. Elles entrent alors dans le calcul de la QoS. Le programme du CKA s'en tient aux ressources par conteneur ; retiens seulement que le champ existe.
@@ -297,7 +297,7 @@ L'**OOM kill** est le fait du noyau. Quand les processus d'un conteneur dépasse
 ```
 
 > [!warning] `Error` (code 137) au lieu de `OOMKilled`
-> La raison `OOMKilled` vient de containerd, qui surveille par inotify le fichier `memory.events` du cgroup de chaque conteneur. Sur un poste dont la limite inotify n'a pas été relevée (chapitre 1.6), cette surveillance échoue pour une partie des conteneurs : `journalctl -u containerd` dans le nœud montre `failed to watch oom events … failed to create inotify fd: too many open files`, et le conteneur tué s'affiche `Error`, code 137, au lieu de `OOMKilled`. Le noyau a pourtant bien tué le processus : `sudo dmesg` dans le nœud montre `Memory cgroup out of memory: Killed process … (sh)`. Ce n'est un comportement ni de Kubernetes ni de minikube, mais la limite de l'hôte, atteinte d'autant plus vite que le lab porte de conteneurs ; quand la surveillance a pu s'installer, le lab affiche bien `OOMKilled`.
+> La raison `OOMKilled` vient de containerd, qui surveille par inotify le fichier `memory.events` du cgroup de chaque conteneur. Sur un poste dont la limite inotify n'a pas été relevée (chapitre 1.6), cette surveillance échoue pour une partie des conteneurs : `journalctl -u containerd` dans le nœud montre `failed to watch oom events … failed to create inotify fd: too many open files`, et le conteneur tué s'affiche `Error`, code 137, au lieu de `OOMKilled`. Le noyau a pourtant bien tué le processus : `sudo dmesg` dans le nœud montre `Memory cgroup out of memory: Killed process … (sh)`. Ce n'est un comportement ni de Kubernetes ni de minikube, mais la limite de l'hôte, atteinte d'autant plus vite que le lab porte de nombreux conteneurs ; quand la surveillance a pu s'installer, le lab affiche bien `OOMKilled`.
 
 L'**étranglement CPU** ne tue rien. Un conteneur qui atteint sa limit CPU attend la période suivante ; il ralentit. Le symptôme indirect est souvent une sonde qui dépasse son `timeoutSeconds` d'une seconde, et un redémarrage par la sonde de vivacité : la cause est alors la limit CPU, pas l'application.
 
@@ -442,7 +442,7 @@ Un conteneur éphémère est un conteneur ajouté à un pod **en cours d'exécut
 kubectl -n boutique debug -it outils --image=busybox:1.37.0 --target=outils
 ```
 
-`--target` place le conteneur de débogage dans l'espace de noms PID du conteneur visé, ce qui permet de voir ses processus. Depuis 1.36, le profil par défaut de `kubectl debug` est `general`. Les usages (image distroless sans shell, copie de pod, débogage de nœud) sont traités au [chapitre 22](22-depanner-les-applications.md).
+`--target` place le conteneur de débogage dans l'espace de noms PID du conteneur visé, ce qui permet de voir ses processus. Depuis 1.36, le profil par défaut de `kubectl debug` est `general`. Les usages (image distroless sans shell, copie de pod, débogage de nœud) sont traités au [chapitre 22.5](22-depanner-les-applications.md).
 
 ### 4.12 Redimensionnement en place
 
@@ -521,9 +521,9 @@ Chaque conteneur peut dire, ressource par ressource, si une modification exige u
 | Pods exclus | pods statiques, pods Windows, conteneurs sous gestionnaire de CPU ou de mémoire en politique statique, conteneurs éphémères |
 | Swap | un pod qui utilise du swap ne change sa mémoire qu'avec `RestartContainer` |
 | Init containers | les sidecars sont redimensionnables ; depuis 1.37 (porte `InPlacePodVerticalScalingInitContainers` stable), un init container classique **en cours d'exécution** l'est aussi, avec `NotRequired` uniquement. La liste des limitations de la page de tâche dit encore le contraire : elle n'a pas suivi |
-| Variables d'environnement | une variable alimentée par `resourceFieldRef` garde l'ancienne valeur jusqu'au redémarrage ; un volume downward API, lui, est mis à jour ([chapitre 6](06-configmaps-et-secrets.md)) |
+| Variables d'environnement | une variable alimentée par `resourceFieldRef` garde l'ancienne valeur jusqu'au redémarrage ; un volume downward API, lui, est mis à jour ([chapitre 6.8](06-configmaps-et-secrets.md)) |
 
-Un dernier point relie ce chapitre au suivant : redimensionner en place un pod **géré par un Deployment** ne modifie pas son modèle. Le prochain rollout, ou le simple remplacement du pod, revient aux valeurs du modèle. Pour changer durablement les ressources d'une application, on modifie le Deployment (`kubectl set resources deployment/…`), ce qui crée de nouveaux pods ; le redimensionnement en place sert aux pods isolés, aux ajustements temporaires, et aux outils comme le VerticalPodAutoscaler ([chapitre 7](07-autoscaling.md)).
+Un dernier point relie ce chapitre au suivant : redimensionner en place un pod **géré par un Deployment** ne modifie pas son modèle. Le prochain rollout, ou le simple remplacement du pod, revient aux valeurs du modèle. Pour changer durablement les ressources d'une application, on modifie le Deployment (`kubectl set resources deployment/…`), ce qui crée de nouveaux pods ; le redimensionnement en place sert aux pods isolés, aux ajustements temporaires, et aux outils comme le VerticalPodAutoscaler ([chapitre 7.13](07-autoscaling.md)).
 
 > [!tip] Réflexe d'examen
 > Mots-clés de l'énoncé : « without restarting », « in place », « resize ». La page à ouvrir : « Resize CPU and Memory Resources assigned to Containers » (kubernetes.io/docs/tasks/configure-pod-container/resize-container-resources/). Vérifie ensuite **le statut**, pas la spec : `kubectl get pod P -o jsonpath='{.status.containerStatuses[0].resources}'` et `restartCount`.
@@ -596,7 +596,7 @@ spec:
       capabilities: {drop: ["ALL"]}
 ```
 
-Ses journaux affichent `uid=1000 gid=3000 groups=2000,3000`. Les erreurs de sécurité apparaissent au démarrage du conteneur, en `CreateContainerConfigError`, avec un message explicite dans `kubectl describe pod` : `container has runAsNonRoot and image will run as root` quand l'image démarre en root, `container has runAsNonRoot and image has non-numeric user (appuser), cannot verify user is non-root` quand l'image déclare un utilisateur par son nom (il faut alors ajouter un `runAsUser` numérique). Ces champs sont aussi ce que vérifie Pod Security Admission, qui refuse ou signale les pods trop permissifs selon le niveau du namespace : c'est l'objet du [chapitre 8](08-ordonnancement-et-admission.md).
+Ses journaux affichent `uid=1000 gid=3000 groups=2000,3000`. Les erreurs de sécurité apparaissent au démarrage du conteneur, en `CreateContainerConfigError`, avec un message explicite dans `kubectl describe pod` : `container has runAsNonRoot and image will run as root` quand l'image démarre en root, `container has runAsNonRoot and image has non-numeric user (appuser), cannot verify user is non-root` quand l'image déclare un utilisateur par son nom (il faut alors ajouter un `runAsUser` numérique). Ces champs sont aussi ce que vérifie Pod Security Admission, qui refuse ou signale les pods trop permissifs selon le niveau du namespace : c'est l'objet du [chapitre 8.13](08-ordonnancement-et-admission.md).
 
 ### 4.15 Pièges courants
 
@@ -1034,7 +1034,7 @@ Crée dans `boutique` un pod `gourmand` (`busybox:1.37.0`) limité à `32Mi` de 
 >
 > ```bash
 > kubectl apply -f ~/cka/boutique/gourmand.yaml
-> kubectl -n boutique get pod gourmand -w           # OOMKilled, puis CrashLoopBackOff
+> kubectl -n boutique get pod gourmand -w           # OOMKilled, puis CrashLoopBackOff (ou Error)
 > kubectl -n boutique describe pod gourmand | grep -A4 'Last State'
 > kubectl -n boutique delete pod gourmand --now
 > ```

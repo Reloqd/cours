@@ -7,7 +7,7 @@ date: 2026-10-23
 
 ## 15. Volumes, PV, PVC et StorageClasses
 
-Ce chapitre traite de tout ce qui permet à un pod de garder des données au-delà de la vie de ses conteneurs : les volumes déclarés dans le pod, les PersistentVolumes (PV) et les PersistentVolumeClaims (PVC) qui découplent le stockage de son usage, les StorageClasses qui automatisent sa création, l'architecture CSI qui relie Kubernetes aux systèmes de stockage, l'agrandissement, les instantanés et le stockage des StatefulSets. Le domaine *Storage* ne pèse que 10 % de l'examen, mais ses tâches sont courtes, déterministes et presque toujours les mêmes : créer une StorageClass, un PV, une PVC, un pod qui la monte, et comprendre pourquoi une PVC reste `Pending`. Ce sont des points faciles à prendre, à condition de connaître par cœur les règles de liaison, car un seul champ faux suffit à laisser la PVC en attente sans message d'erreur explicite. Le chapitre couvre les trois compétences du domaine, *Implement storage classes and dynamic volume provisioning*, *Configure volume types, access modes and reclaim policies* et *Manage persistent volumes and persistent volume claims*, ainsi que la partie stockage de *Understand extension interfaces (CNI, CSI, CRI, etc.)*, que le [chapitre 18](18-interfaces-crd-et-operateurs.md) reprend du point de vue des interfaces.
+Ce chapitre traite de tout ce qui permet à un pod de garder des données au-delà de la vie de ses conteneurs : les volumes déclarés dans le pod, les PersistentVolumes (PV) et les PersistentVolumeClaims (PVC) qui découplent le stockage de son usage, les StorageClasses qui automatisent sa création, l'architecture CSI qui relie Kubernetes aux systèmes de stockage, l'agrandissement, les instantanés et le stockage des StatefulSets. Le domaine *Storage* ne pèse que 10 % de l'examen, mais ses tâches sont courtes, déterministes et presque toujours les mêmes : créer une StorageClass, un PV, une PVC, un pod qui la monte, et comprendre pourquoi une PVC reste `Pending`. Ce sont des points faciles à prendre, à condition de connaître par cœur les règles de liaison, car un seul champ faux suffit à laisser la PVC en attente sans message d'erreur explicite. Le chapitre couvre les trois compétences du domaine, *Implement storage classes and dynamic volume provisioning*, *Configure volume types, access modes and reclaim policies* et *Manage persistent volumes and persistent volume claims*, ainsi que la partie stockage de *Understand extension interfaces (CNI, CSI, CRI, etc.)*, que le [chapitre 18.3.2](18-interfaces-crd-et-operateurs.md) reprend du point de vue des interfaces.
 
 ### 15.1 Du volume éphémère au volume persistant
 
@@ -106,7 +106,7 @@ Qui crée quoi :
   stockage réel (disque, export NFS, volume CSI…)
 ```
 
-Un PV peut naître de deux façons. En **provisionnement statique**, l'administrateur crée lui-même le PV. En **provisionnement dynamique**, aucune PV existante ne convient : la PVC désigne une StorageClass, et le provisionneur de cette classe crée le stockage et le PV à la demande (15.6).
+Un PV peut naître de deux façons. En **provisionnement statique**, l'administrateur crée lui-même le PV. En **provisionnement dynamique**, aucun PV existant ne convient : la PVC désigne une StorageClass, et le provisionneur de cette classe crée le stockage et le PV à la demande (15.6).
 
 Les champs à connaître sans hésiter :
 
@@ -322,7 +322,7 @@ Provisionnement dynamique avec WaitForFirstConsumer :
   dès la PVC, sans savoir où le pod tournera.
 ```
 
-Le mode `Immediate` convient au stockage accessible de partout (NFS, stockage réseau sans zones). Pour tout stockage lié à une topologie (disque local, disque zonal d'un cloud), il provoque des pods non planifiables : le volume est créé dans une zone ou sur un nœud au hasard, et le pod doit ensuite y aller, quels que soient ses autres contraintes. `WaitForFirstConsumer` retarde liaison et provisionnement jusqu'à ce qu'un pod utilise la PVC, de sorte que le scheduler décide en connaissant toutes les contraintes (ressources, sélecteurs, affinités, taints). C'est le mode à choisir par défaut, et le seul raisonnable pour `local`.
+Le mode `Immediate` convient au stockage accessible de partout (NFS, stockage réseau sans zones). Pour tout stockage lié à une topologie (disque local, disque zonal d'un cloud), il provoque des pods non planifiables : le volume est créé dans une zone ou sur un nœud au hasard, et le pod doit ensuite y aller, quelles que soient ses autres contraintes. `WaitForFirstConsumer` retarde liaison et provisionnement jusqu'à ce qu'un pod utilise la PVC, de sorte que le scheduler décide en connaissant toutes les contraintes (ressources, sélecteurs, affinités, taints). C'est le mode à choisir par défaut, et le seul raisonnable pour `local`.
 
 > [!danger]
 > Avec une classe `WaitForFirstConsumer`, n'utilise jamais `spec.nodeName` pour placer le pod. `nodeName` court-circuite le scheduler : personne ne pose l'annotation `selected-node`, la PVC reste `Pending` et le pod attend son volume. Contraindre le pod se fait par `nodeSelector` (par exemple `kubernetes.io/hostname: cka-m03`) ou par une affinité de nœud.
@@ -475,7 +475,7 @@ spec:
 
 ### 15.11 StatefulSet et volumeClaimTemplates
 
-Le [chapitre 5](05-deployments-et-controleurs.md) a présenté l'identité stable des pods d'un StatefulSet ; le stockage en est l'autre moitié. Pour chaque entrée de `spec.volumeClaimTemplates`, le contrôleur crée **une PVC par pod**, nommée `<modèle>-<statefulset>-<ordinal>`, et la monte toujours dans le pod de même ordinal, quel que soit le nœud où il renaît. Le StatefulSet `redis` du fil rouge, avec un modèle `data`, produit la PVC `data-redis-0`. Supprimer le pod `redis-0` ne touche pas à `data-redis-0` : le pod recréé la retrouve, et le scheduler le renvoie sur le nœud du volume si celui-ci a une affinité.
+Le [chapitre 5.7](05-deployments-et-controleurs.md) a présenté l'identité stable des pods d'un StatefulSet ; le stockage en est l'autre moitié. Pour chaque entrée de `spec.volumeClaimTemplates`, le contrôleur crée **une PVC par pod**, nommée `<modèle>-<statefulset>-<ordinal>`, et la monte toujours dans le pod de même ordinal, quel que soit le nœud où il renaît. Le StatefulSet `redis` du fil rouge, avec un modèle `data`, produit la PVC `data-redis-0`. Supprimer le pod `redis-0` ne touche pas à `data-redis-0` : le pod recréé la retrouve, et le scheduler le renvoie sur le nœud du volume si celui-ci a une affinité.
 
 ```
 StatefulSet redis, replicas: 1, volumeClaimTemplates: [data]
@@ -873,7 +873,7 @@ Active les addons `volumesnapshots` puis `csi-hostpath-driver`. Crée la Storage
 > kubectl -n boutique exec redis-0 -- redis-cli GET commandes
 > ```
 >
-> Le `nodeSelector` envoie `redis-0` sur `cka-m03`, seul nœud `disque=ssd`. La classe étant en `WaitForFirstConsumer`, le provisionneur du plugin CSI de `cka-m03` crée le volume et un PV dont l'affinité est `topology.hostpath.csi/node In [cka-m03]`. Le pod recréé porte le même nom, retrouve la PVC `data-redis-0` et rejoue le journal AOF écrit dans `/data` : la clé est là. Le pod n'a pas besoin de réseau pour ces commandes, `kubectl exec` passant par le kubelet ; les NetworkPolicies du chapitre 14 (`redis-entree`, `api-sortie`) préparent déjà l'accès de `api` sur le port 6379.
+> Le `nodeSelector` envoie `redis-0` sur `cka-m03`, seul nœud `disque=ssd`. La classe étant en `WaitForFirstConsumer`, le provisionneur du plugin CSI de `cka-m03` crée le volume et un PV dont l'affinité est `topology.hostpath.csi/node In [cka-m03]`. Le pod recréé porte le même nom, retrouve la PVC `data-redis-0` et rejoue le journal AOF écrit dans `/data` : la clé est là. Le pod n'a pas besoin de réseau pour ces commandes, `kubectl exec` passant par le kubelet ; les NetworkPolicies du chapitre 14.11 (`redis-entree`, `api-sortie`) préparent déjà l'accès de `api` sur le port 6379.
 >
 > **Vérification** : `kubectl -n boutique get pvc data-redis-0` affiche `Bound` en classe `rapide` et `1Gi` ; la dernière commande affiche `42`.
 

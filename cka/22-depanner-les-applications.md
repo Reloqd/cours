@@ -102,27 +102,29 @@ La première partie compte, pour chaque raison, combien de nœuds ont été éca
 | `node(s) didn't match PersistentVolume's node affinity` | VolumeBinding | PV local ou CSI attaché à un autre nœud |
 | `node(s) didn't find available persistent volumes to bind` | VolumeBinding | aucun PV compatible pour une PVC `WaitForFirstConsumer` |
 
-Deux cas de `Pending` n'ont **pas** d'événement `FailedScheduling`. Le premier : aucun scheduler ne tourne, ou le pod demande un `schedulerName` qui n'existe pas ; personne n'essaie, personne ne se plaint (chapitre 23). Le second : le pod n'existe pas du tout. Un quota dépassé, une LimitRange violée ou un refus de Pod Security empêchent la **création** du pod : on ne voit aucun pod, seulement un événement `FailedCreate` sur le ReplicaSet (22.4.2).
+Deux cas de `Pending` n'ont **pas** d'événement `FailedScheduling`. Le premier : aucun scheduler ne tourne, ou le pod demande un `schedulerName` qui n'existe pas ; personne n'essaie, personne ne se plaint (chapitre 23.4.5). Le second : le pod n'existe pas du tout. Un quota dépassé, une LimitRange violée ou un refus de Pod Security empêchent la **création** du pod : on ne voit aucun pod, seulement un événement `FailedCreate` sur le ReplicaSet (22.4.2).
 
-Un pod placé mais bloqué en `ContainerCreating` a dépassé le scheduler : le problème est sur le nœud. `FailedMount` désigne un volume (ConfigMap ou Secret absent d'un volume, PVC non attachée) ; `FailedCreatePodSandBox` désigne presque toujours le CNI, avec le message du plugin (pour Calico : `plugin type="calico" failed (add): …`), voir le [chapitre 9](09-reseau-des-pods.md).
+Un pod placé mais bloqué en `ContainerCreating` a dépassé le scheduler : le problème est sur le nœud. `FailedMount` désigne un volume (ConfigMap ou Secret absent d'un volume, PVC non attachée) ; `FailedCreatePodSandBox` désigne presque toujours le CNI, avec le message du plugin (pour Calico : `plugin type="calico" failed (add): …`), voir le [chapitre 9.3](09-reseau-des-pods.md).
 
 #### 22.2.3 ErrImagePull et ImagePullBackOff
 
 Le kubelet demande l'image au runtime. En cas d'échec, le conteneur passe en `ErrImagePull`, puis, pendant l'attente avant l'essai suivant, en `ImagePullBackOff`. Le délai entre deux essais commence à **10 secondes** et double à chaque échec jusqu'à un plafond de **300 secondes** fixé dans le code du kubelet. Les événements racontent la séquence :
 
 ```
-Normal   Pulling   Pulling image "nginx:1.30.6-alpnie"
-Warning  Failed    Failed to pull image "nginx:1.30.6-alpnie": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:1.30.6-alpnie": failed to resolve reference "docker.io/library/nginx:1.30.6-alpnie": docker.io/library/nginx:1.30.6-alpnie: not found
-Warning  Failed    Error: ErrImagePull
-Normal   BackOff   Back-off pulling image "nginx:1.30.6-alpnie"
-Warning  Failed    Error: ImagePullBackOff
+Normal   Pulling   spec.containers{nginx}: Pulling image "nginx:1.30.6-alpnie"
+Warning  Failed    spec.containers{nginx}: Failed to pull image "nginx:1.30.6-alpnie": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:1.30.6-alpnie": failed to resolve reference "docker.io/library/nginx:1.30.6-alpnie": docker.io/library/nginx:1.30.6-alpnie: not found
+Warning  Failed    spec.containers{nginx}: Error: ErrImagePull
+Normal   BackOff   spec.containers{nginx}: Back-off pulling image "nginx:1.30.6-alpnie"
+Warning  Failed    spec.containers{nginx}: Error: ImagePullBackOff
 ```
 
-Le message de containerd désigne la cause : `not found` (étiquette ou dépôt inexistant), `pull access denied` ou `401 Unauthorized` (registre privé : il manque un `imagePullSecrets`, chapitre 6), `429 Too Many Requests` (quota du registre), `no match for platform in manifest` (architecture). `InvalidImageName` signale une référence syntaxiquement fausse ; `ErrImageNeverPull`, une image absente avec `imagePullPolicy: Never`. Corriger l'image dans le contrôleur crée de nouveaux pods ; le pod en attente ne se répare pas tout seul tant que son spec reste faux.
+(Extrait de `kubectl describe pod`, colonnes `Age` et `From` omises : en 1.37, `describe` préfixe chaque message du champ concerné, ici `spec.containers{nginx}:` ; `kubectl events` affiche le message seul.)
+
+Le message de containerd désigne la cause : `not found` (étiquette ou dépôt inexistant), `pull access denied` ou `401 Unauthorized` (registre privé : il manque un `imagePullSecrets`, chapitre 6.6), `429 Too Many Requests` (quota du registre), `no match for platform in manifest` (architecture). `InvalidImageName` signale une référence syntaxiquement fausse ; `ErrImageNeverPull`, une image absente avec `imagePullPolicy: Never`. Corriger l'image dans le contrôleur crée de nouveaux pods ; le pod en attente ne se répare pas tout seul tant que son spec reste faux.
 
 #### 22.2.4 CrashLoopBackOff
 
-Le conteneur démarre, puis s'arrête. Avec `restartPolicy: Always` (seule valeur permise dans un Deployment) ou `OnFailure`, le kubelet le relance avec un délai exponentiel : **10 s, 20 s, 40 s, 80 s, 160 s, puis 300 s** à chaque fois, et remet le compteur à zéro après **10 minutes** de fonctionnement sans incident. `CrashLoopBackOff` est l'état d'attente entre deux relances. En 1.37, deux fonctions modifient ce barème : `KubeletCrashLoopBackOffMax` (bêta, active) permet de fixer par nœud un plafond plus bas avec le champ `crashLoopBackOff.maxContainerRestartPeriod` de la configuration du kubelet (entre `1s` et `300s`) ; `ReduceDefaultCrashLoopBackOffDecay` (alpha, inactive) ramènerait le barème à 1 s puis 60 s. Sans configuration particulière, c'est 10 s et 300 s.
+Le conteneur démarre, puis s'arrête. Avec `restartPolicy: Always` (seule valeur permise dans un Deployment) ou `OnFailure`, le kubelet le relance avec un délai exponentiel : **10 s, 20 s, 40 s, 80 s, 160 s, puis 300 s** à chaque fois, et remet le compteur à zéro après **10 minutes** de fonctionnement sans incident. `CrashLoopBackOff` est l'état d'attente entre deux relances, mais le kubelet ne l'inscrit qu'en resynchronisant le pod : d'ici là, le conteneur reste `terminated` et STATUS affiche `Error`, parfois jusqu'à la synchronisation suivante, qui le relance (constaté dans le lab sur plusieurs pods : `Error` la plupart du temps, et des relances plus espacées que le barème ; d'autres, comme `api` à l'exercice 22.2, passent aussitôt en `CrashLoopBackOff`). Les deux affichages désignent la même boucle ; voir 21.3.2 pour la lecture des journaux dans ce cas. En 1.37, deux fonctions modifient ce barème : `KubeletCrashLoopBackOffMax` (bêta, active) permet de fixer par nœud un plafond plus bas avec le champ `crashLoopBackOff.maxContainerRestartPeriod` de la configuration du kubelet (entre `1s` et `300s`) ; `ReduceDefaultCrashLoopBackOffDecay` (alpha, inactive) ramènerait le barème à 1 s puis 60 s. Sans configuration particulière, c'est 10 s et 300 s.
 
 La cause est dans l'instance précédente du conteneur :
 
@@ -159,7 +161,7 @@ La limite mémoire d'un conteneur devient `memory.max` de son cgroup. Quand la c
       Exit Code:    137
 ```
 
-`OOMKilled` est la seule raison qui prouve un dépassement de la limite du conteneur ; un code 137 avec la raison `Error` est un SIGKILL d'une autre origine. Le remède est de relever la limite (et souvent la request), ou de corriger l'application. Le redimensionnement en place (chapitre 4) évite de recréer le pod quand la politique `resizePolicy` le permet. Un OOM du nœud entier, lui, est une autre affaire : le kubelet l'annonce par un événement `SystemOOM` sur le nœud.
+`OOMKilled` est la seule raison qui prouve un dépassement de la limite du conteneur ; un code 137 avec la raison `Error` est en principe un SIGKILL d'une autre origine. Une exception dans le lab : sur un poste dont la limite inotify n'a pas été relevée, containerd ne parvient pas à surveiller les événements OOM de certains conteneurs et affiche `Error`, code 137, pour un vrai OOM (encadré de la section 4.7) ; `sudo dmesg` dans le nœud tranche (`Memory cgroup out of memory: Killed process …`). Le remède est de relever la limite (et souvent la request), ou de corriger l'application. Le redimensionnement en place (chapitre 4.12) évite de recréer le pod quand la politique `resizePolicy` le permet. Un OOM du nœud entier, lui, est une autre affaire : le kubelet l'annonce par un événement `SystemOOM` sur le nœud.
 
 #### 22.2.7 Evicted, Terminating et Completed
 
@@ -168,7 +170,7 @@ Un pod **évincé par le kubelet** (pression mémoire, disque ou PID du nœud) p
 > [!info] minikube ≠ examen
 > Les nœuds du lab ont l'éviction pour manque de disque désactivée (`evictionHard` à `0%` pour `nodefs` et `imagefs`) et annoncent la mémoire de l'hôte : tu n'y verras pas d'éviction par pression du kubelet. Sur un nœud kubeadm, les seuils par défaut s'appliquent (`memory.available` 100Mi, `nodefs.available` 10 %, `nodefs.inodesFree` 5 %, `imagefs.available` 15 %).
 
-Un pod **bloqué en `Terminating`** a une `deletionTimestamp` mais n'est pas retiré de l'API. Trois causes : un **finalizer** que personne ne lève (`kubectl get pod <p> -o jsonpath='{.metadata.finalizers}'`) ; un **kubelet injoignable**, qui ne peut pas confirmer l'arrêt des conteneurs (nœud `NotReady`, chapitre 23) ; un `preStop` ou une application qui ignore SIGTERM, auquel cas le pod disparaît au bout de `terminationGracePeriodSeconds` (30 s par défaut). On lève un finalizer orphelin par `kubectl patch pod <p> --type=merge -p '{"metadata":{"finalizers":null}}'`. La suppression forcée, `kubectl delete pod <p> --grace-period=0 --force`, retire l'objet de l'API **sans** attendre le kubelet ; kubectl le rappelle par `Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.` Sur un pod de StatefulSet dont le nœud est injoignable, c'est dangereux : le contrôleur recrée aussitôt un pod du même nom ailleurs, alors que l'ancien tourne peut-être encore et écrit sur le même volume.
+Un pod **bloqué en `Terminating`** a une `deletionTimestamp` mais n'est pas retiré de l'API. Trois causes : un **finalizer** que personne ne lève (`kubectl get pod <p> -o jsonpath='{.metadata.finalizers}'`) ; un **kubelet injoignable**, qui ne peut pas confirmer l'arrêt des conteneurs (nœud `NotReady`, chapitre 23.2) ; un `preStop` ou une application qui ignore SIGTERM, auquel cas le pod disparaît au bout de `terminationGracePeriodSeconds` (30 s par défaut). On lève un finalizer orphelin par `kubectl patch pod <p> --type=merge -p '{"metadata":{"finalizers":null}}'`. La suppression forcée, `kubectl delete pod <p> --grace-period=0 --force`, retire l'objet de l'API **sans** attendre le kubelet ; kubectl le rappelle par `Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.` Sur un pod de StatefulSet dont le nœud est injoignable, c'est dangereux : le contrôleur recrée aussitôt un pod du même nom ailleurs, alors que l'ancien tourne peut-être encore et écrit sur le même volume.
 
 `Completed` (phase `Succeeded`) est l'état normal d'un pod de Job. Dans un Deployment, il signale une commande qui rend la main : le kubelet la relance, et le pod finit en `CrashLoopBackOff` avec un code de sortie 0.
 
@@ -188,7 +190,7 @@ Le message de l'événement `Unhealthy` reprend la sortie de la sonde et suffit 
 
 #### 22.4.1 Le mécanisme
 
-Une mise à jour de Deployment crée un nouveau ReplicaSet et fait glisser les réplicas de l'ancien vers le nouveau, dans les bornes de `maxSurge` et `maxUnavailable` (chapitre 5). Si les nouveaux pods ne deviennent jamais disponibles, le glissement s'arrête : avec `maxUnavailable: 0`, les anciens pods restent tous en place et le service continue, ce qui rend la panne discrète. Le contrôleur mesure la progression : faute de progrès pendant `progressDeadlineSeconds` (600 s par défaut), il pose la condition `Progressing=False` avec la raison `ProgressDeadlineExceeded`. Il ne fait rien d'autre : pas de retour arrière automatique.
+Une mise à jour de Deployment crée un nouveau ReplicaSet et fait glisser les réplicas de l'ancien vers le nouveau, dans les bornes de `maxSurge` et `maxUnavailable` (chapitre 5.4). Si les nouveaux pods ne deviennent jamais disponibles, le glissement s'arrête : avec `maxUnavailable: 0`, les anciens pods restent tous en place et le service continue, ce qui rend la panne discrète. Le contrôleur mesure la progression : faute de progrès pendant `progressDeadlineSeconds` (600 s par défaut), il pose la condition `Progressing=False` avec la raison `ProgressDeadlineExceeded`. Il ne fait rien d'autre : pas de retour arrière automatique.
 
 ```bash
 kubectl -n boutique rollout status deployment/front --timeout=30s
@@ -222,7 +224,7 @@ L'ordre compte : la LimitRange (`LimitRanger`) vérifie avant Pod Security, qui 
 
 ### 22.5 `kubectl debug`
 
-`kubectl debug` a trois usages : ajouter un **conteneur éphémère** à un pod qui tourne, créer une **copie modifiée** d'un pod, ouvrir un pod privilégié sur un **nœud**. Le chapitre 4 a présenté le conteneur éphémère ; voici le détail.
+`kubectl debug` a trois usages : ajouter un **conteneur éphémère** à un pod qui tourne, créer une **copie modifiée** d'un pod, ouvrir un pod privilégié sur un **nœud**. Le chapitre 4.11 a présenté le conteneur éphémère ; voici le détail.
 
 #### 22.5.1 Le conteneur éphémère
 
@@ -232,7 +234,7 @@ kubectl -n boutique debug -it <pod> --image=nicolaka/netshoot:v0.16 --target=<co
 
 kubectl ajoute un élément à `spec.ephemeralContainers` par la sous-ressource `pods/ephemeralcontainers` (droit RBAC `patch` sur cette sous-ressource), le kubelet le démarre dans le pod existant, et kubectl s'y attache. Sans `-c`, le nom est tiré au hasard et annoncé : `Defaulting debug container name to debugger-8xzrl.` Le conteneur partage l'espace réseau du pod (même IP, mêmes ports, **mêmes NetworkPolicies**) et ses volumes s'il les monte ; avec `--target`, il rejoint aussi l'espace de processus du conteneur visé, dont le processus principal devient le PID 1 visible par `ps`, et dont le système de fichiers se lit par `/proc/1/root`. C'est la façon de déboguer une image *distroless* sans shell : `kubectl exec` y échoue (`exec: "sh": executable file not found in $PATH`), le conteneur éphémère apporte ses propres outils.
 
-Ses limites sont fixées par l'API : pas de ports, pas de sondes, pas de ressources (il n'entre pas dans le calcul du quota), jamais relancé, et **impossible à retirer** : il reste dans le spec, terminé, jusqu'à la suppression du pod. Les pods statiques n'acceptent pas de conteneurs éphémères ; pour etcd ou l'API server, on passe par le nœud (22.5.4 et chapitre 23).
+Ses limites sont fixées par l'API : pas de ports, pas de sondes, pas de ressources (il n'entre pas dans le calcul du quota), jamais relancé, et **impossible à retirer** : il reste dans le spec, terminé, jusqu'à la suppression du pod. Les pods statiques n'acceptent pas de conteneurs éphémères ; pour etcd ou l'API server, on passe par le nœud (22.5.4 et chapitre 23.4.3).
 
 #### 22.5.2 Les profils
 
@@ -258,7 +260,9 @@ kubectl -n boutique debug <pod> --copy-to=<pod>-copie --set-image='*=busybox:1.3
 
 `--copy-to` crée un **nouveau pod** à partir du spec de l'original, sans toucher à l'original (sauf avec `--replace`, qui le supprime). C'est l'outil pour un conteneur qui plante au démarrage : `--container=<c> -- sh` remplace sa commande par un shell, ce qui permet d'inspecter le système de fichiers et de lancer la commande d'origine à la main. `--set-image` change des images (même syntaxe que `kubectl set image`), `--share-processes` (vrai par défaut avec `--copy-to`) partage l'espace de processus, `--same-node` place la copie sur le nœud de l'original, `--keep-labels`, `--keep-annotations`, `--keep-liveness`, `--keep-readiness`, `--keep-startup` et `--keep-init-containers` gardent ce que le profil retirerait.
 
-La copie n'a **pas les labels** de l'original (sauf `--keep-labels`) : aucun Service ne l'inclut, et les NetworkPolicies qui sélectionnent par label (`tier=web`, `app=api`) ne s'y appliquent pas ; seules s'appliquent celles qui sélectionnent tous les pods (`refus-par-defaut`, `autorise-dns`). Une copie de `api` ne joint donc plus `redis`. N'oublie pas de la supprimer : c'est un pod nu.
+Le profil, le partage des processus et ces retraits ne s'appliquent que si la copie reçoit un conteneur de débogage (`--image`) ou si la commande d'un conteneur est remplacée (`--container=<c> -- …`). Une copie faite avec le seul `--set-image`, comme dans la seconde commande ci-dessus, garde tels quels les labels et les sondes de l'original. Si l'original appartient à un ReplicaSet, celui-ci adopte la copie, se retrouve avec un pod de trop et la supprime dans la seconde : le ReplicaSet porte alors l'événement `SuccessfulDelete … Deleted pod: <copie>` (constaté avec un pod `api`). Ajoute `--image` ou `--container=… -- sh` pour que le profil s'applique et retire les labels.
+
+Dans les autres cas, la copie n'a **pas les labels** de l'original (sauf `--keep-labels`) : aucun Service ne l'inclut, et les NetworkPolicies qui sélectionnent par label (`tier=web`, `app=api`) ne s'y appliquent pas ; seules s'appliquent celles qui sélectionnent tous les pods (`refus-par-defaut`, `autorise-dns`). Une copie de `api` ne joint donc plus `redis`. N'oublie pas de la supprimer : c'est un pod nu.
 
 #### 22.5.4 Le débogage d'un nœud
 
@@ -266,7 +270,7 @@ La copie n'a **pas les labels** de l'original (sauf `--keep-labels`) : aucun Ser
 kubectl debug node/cka-m02 -it --image=busybox:1.37.0 -n default
 ```
 
-Le pod `node-debugger-cka-m02-xxxxx` est créé sur le nœud avec le profil `general` : espaces réseau, PID et IPC de l'hôte, racine du nœud montée en `/host` ; `chroot /host` donne un shell presque équivalent à une connexion SSH. Il est créé dans le namespace courant : choisis-en un sans Pod Security restrictive (`-n default`), sinon `baseline` le refuse (volume `hostPath`, espaces de l'hôte). En sortant, le pod reste `Completed` et doit être supprimé à la main. Le [chapitre 23](23-depanner-le-cluster.md) s'en sert quand SSH n'est pas disponible.
+Le pod `node-debugger-cka-m02-xxxxx` est créé sur le nœud avec le profil `general` : espaces réseau, PID et IPC de l'hôte, racine du nœud montée en `/host` ; `chroot /host` donne un shell presque équivalent à une connexion SSH. Il est créé dans le namespace courant : choisis-en un sans Pod Security restrictive (`-n default`), sinon `baseline` le refuse (volume `hostPath`, espaces de l'hôte). En sortant, le pod reste `Completed` et doit être supprimé à la main. Le [chapitre 23.4.3](23-depanner-le-cluster.md) en rappelle la limite : il crée un pod, donc il ne remplace pas SSH quand l'API ne répond plus.
 
 #### 22.5.5 Les autres outils
 
@@ -307,7 +311,7 @@ kubectl -n boutique exec outils -- curl -s -o /dev/null -w '%{http_code}\n' --ma
 | aucun pod ne porte les labels du sélecteur | sélecteur faux (faute de frappe, label renommé) |
 | EndpointSlice avec des adresses mais `ready=false` | sondes de disponibilité en échec (22.3) |
 | EndpointSlice prête, port inattendu dans la colonne `PORTS` | `targetPort` faux, ou port nommé absent du conteneur |
-| pod joignable en direct, Service injoignable | kube-proxy (chapitre 23), ou NetworkPolicy sur le chemin |
+| pod joignable en direct, Service injoignable | kube-proxy (chapitre 23.6), ou NetworkPolicy sur le chemin |
 | Service joignable par IP, pas par nom | DNS (22.7) |
 | NodePort injoignable de l'extérieur, ClusterIP joignable | `externalTrafficPolicy: Local` sans pod local, pare-feu, politique d'entrée qui ignore le réseau des nœuds |
 
@@ -315,7 +319,7 @@ L'API `Endpoints` existe encore, mais sa lecture est dépréciée depuis la 1.33
 
 #### 22.6.2 Ce que fait kube-proxy
 
-Sur un nœud, les règles se lisent avec `iptables-save` (chapitre 10) :
+Sur un nœud, les règles se lisent avec `iptables-save` (chapitre 10.5) :
 
 ```bash
 minikube -p cka ssh -n cka-m02
@@ -327,10 +331,10 @@ Un Service sain apparaît dans la table `nat` (chaînes `KUBE-SVC-…` puis une 
 
 ### 22.7 Dépanner le DNS
 
-La résolution d'un nom de Service suit le `resolv.conf` du pod (`nameserver 10.96.0.10`, domaines de recherche `<ns>.svc.cluster.local svc.cluster.local cluster.local`, `options ndots:5`, chapitre 11). La démarche :
+La résolution d'un nom de Service suit le `resolv.conf` du pod (`nameserver 10.96.0.10`, domaines de recherche `<ns>.svc.cluster.local svc.cluster.local cluster.local`, `options ndots:5`, chapitre 11.6). La démarche :
 
 1. **Depuis quel pod ?** Teste depuis un pod soumis aux mêmes politiques que celui qui échoue. `outils` a une sortie libre (`outils-sortie`) : s'il résout et que `front` ne résout pas, le problème est une NetworkPolicy, pas CoreDNS.
-2. **Le message.** `NXDOMAIN` : le serveur a répondu que le nom n'existe pas (faute de frappe, mauvais namespace, Service absent). `SERVFAIL` : CoreDNS n'a pas pu résoudre (amont injoignable pour un nom externe). `connection timed out; no servers could be reached` : aucune réponse, donc paquets jetés ou CoreDNS absent.
+2. **Le message.** `NXDOMAIN` : le serveur a répondu que le nom n'existe pas (faute de frappe, mauvais namespace, Service absent). `SERVFAIL` : CoreDNS n'a pas pu résoudre (amont injoignable pour un nom externe). `connection timed out; no servers could be reached` : aucune réponse, donc paquets jetés (NetworkPolicy) ou pods CoreDNS présents mais muets. Un CoreDNS absent ou sans pod prêt donne au contraire un **refus** immédiat (`communications error to 10.96.0.10#53: connection refused` avec `dig`) pour un client à sortie libre : kube-proxy rejette le trafic d'un Service sans endpoint (exercices 11.6 et 23.6).
 3. **CoreDNS est-il là ?** `kubectl -n kube-system get pods -l k8s-app=kube-dns`, `kubectl -n kube-system get endpointslices -l kubernetes.io/service-name=kube-dns`, journal de CoreDNS.
 4. **Les politiques de sortie.** Le DNS passe par UDP **et** TCP 53, vers les pods `k8s-app=kube-dns` de `kube-system`. Le port d'une règle de NetworkPolicy est celui du **pod de destination après DNAT** : pour CoreDNS, 53 côté Service comme côté conteneur.
 
@@ -345,7 +349,7 @@ L'image `nginx:1.30.6-alpine` de `front` contient le `nslookup` de busybox, ce q
 
 ### 22.8 Dépanner les NetworkPolicies
 
-Les NetworkPolicies s'additionnent (union des règles autorisantes) et ne s'appliquent qu'aux pods qu'elles sélectionnent, direction par direction (chapitre 14). Une connexion de A vers B doit être autorisée **deux fois** : en sortie de A, par une politique qui sélectionne A, et en entrée de B, par une politique qui sélectionne B. Le diagnostic en découle :
+Les NetworkPolicies s'additionnent (union des règles autorisantes) et ne s'appliquent qu'aux pods qu'elles sélectionnent, direction par direction (chapitre 14.2). Une connexion de A vers B doit être autorisée **deux fois** : en sortie de A, par une politique qui sélectionne A, et en entrée de B, par une politique qui sélectionne B. Le diagnostic en découle :
 
 ```bash
 kubectl -n boutique get networkpolicy
@@ -353,7 +357,7 @@ kubectl -n boutique describe networkpolicy web-entree
 kubectl -n boutique get pod <A> --show-labels          # quelles politiques sélectionnent A ?
 ```
 
-Les erreurs classiques : la politique de sortie oubliée (seule l'entrée de B a été ouverte) ; le DNS oublié dans un namespace en refus par défaut ; le **port** de la règle confondu avec le port du Service (la règle compare le port du pod, après DNAT : un Service `80 → targetPort 8080` exige une règle sur 8080) ; le piège ET/OU du YAML (`- namespaceSelector` et `podSelector` dans le même élément de liste, ou dans deux éléments) ; un `ipBlock` qui ne couvre pas l'adresse source après SNAT (trafic NodePort ou LoadBalancer, qui arrive avec une adresse du réseau des nœuds).
+Les erreurs classiques : la politique de sortie oubliée (seule l'entrée de B a été ouverte) ; le DNS oublié dans un namespace en refus par défaut ; le **port** de la règle confondu avec le port du Service (la règle compare le port du pod, après DNAT : un Service `80 → targetPort 8080` exige une règle sur 8080) ; le piège ET/OU du YAML (`- namespaceSelector` et `podSelector` dans le même élément de liste, ou dans deux éléments) ; un `ipBlock` qui ne couvre pas l'adresse source réellement vue par la politique pour le trafic NodePort ou LoadBalancer : sous Calico en IPIP, l'adresse du client si le pod tourne sur le nœud d'entrée, l'adresse de **tunnel** du nœud d'entrée s'il tourne ailleurs, jamais l'adresse du nœud sur le réseau des nœuds (14.8).
 
 Pour tester avec les politiques **exactes** d'un pod, un conteneur éphémère dans ce pod est l'outil idéal : il partage son espace réseau. Pour confirmer qu'une politique est en cause, une politique temporaire qui autorise tout pour le pod concerné, appliquée puis retirée, tranche en quelques secondes ; Calico applique les changements de politique presque instantanément. Avec Calico, un trafic refusé est **jeté** : le symptôme est toujours un délai dépassé, jamais un refus.
 
@@ -461,7 +465,7 @@ Piège 8 : Supprimer de force un pod de StatefulSet sur un nœud injoignable
 > - Délais : tirage d'image et redémarrages de 10 s à 300 s par doublement ; remise à zéro des redémarrages après 10 minutes sans incident ; `progressDeadlineSeconds` 600.
 > - `CreateContainerConfigError` = ConfigMap, Secret ou clé introuvable : réparer la ressource suffit. `OOMKilled` + 137 = limite mémoire. 128 = exécutable absent.
 > - Un rollout bloqué se lit dans `rollout status`, les conditions et `rollout history` ; `rollout undo` répare un gabarit fautif. StatefulSet : corriger puis supprimer le pod cassé.
-> - `kubectl debug` : conteneur éphémère (`--target`, mêmes réseau et politiques que le pod), copie (`--copy-to`, sans labels), nœud (`node/…`, `/host`) ; profil `general` par défaut depuis 1.36, refusé par un namespace `baseline` : `--profile=baseline`.
+> - `kubectl debug` : conteneur éphémère (`--target`, mêmes réseau et politiques que le pod), copie (`--copy-to`, sans labels dès qu'elle reçoit un conteneur de débogage ou une nouvelle commande), nœud (`node/…`, `/host`) ; profil `general` par défaut depuis 1.36, refusé par un namespace `baseline` : `--profile=baseline`.
 > - Service : sélecteur ↔ labels, EndpointSlice prête et port résolu, `targetPort` ↔ conteneur ; NetworkPolicy : sortie de la source ET entrée de la destination, ports après DNAT, DNS en UDP et TCP 53.
 > - Ingress : 404 pas de règle, 503 pas d'endpoint, 502 refus, 504 silence. Gateway : conditions `Accepted`, `Programmed`, `ResolvedRefs` ; backend invalide = 500.
 
@@ -640,9 +644,11 @@ Lance `lab/pannes.sh casser 04`. Les utilisateurs signalent que `https://api.bou
 >
 > ```
 > {"app":"apl"}
+> NAME                   READY   STATUS    RESTARTS   AGE   LABELS
+> api-6c8b7d9f4b-2kq9z   1/1     Running   0          3h    app=api,pod-template-hash=6c8b7d9f4b,tier=api,topology.kubernetes.io/zone=zone-a
 > ```
 >
-> Le sélecteur vise `app=apl`. Avant de réparer, observe les deux symptômes, qui illustrent 22.1.2 :
+> Le sélecteur vise `app=apl`, les pods portent `app=api` (le label de zone est copié du nœud sur le pod, chapitre 8.3). Avant de réparer, observe les deux symptômes, qui illustrent 22.1.2 :
 >
 > ```bash
 > kubectl -n boutique exec outils -- curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 http://api:8080/hostname
@@ -758,7 +764,7 @@ Lance `lab/pannes.sh casser 06`. Un développeur signale que, depuis les pods de
 > kubectl -n boutique exec deploy/front -- nslookup -timeout=3 api.boutique.svc.cluster.local
 > ```
 >
-> Le risque annoncé était réel : nginx résout `api` (dans `proxy_pass http://api:8080/`) au chargement de sa configuration ; un pod `front` redémarré sans DNS sortirait en erreur (`host not found in upstream "api"`) et bouclerait en `CrashLoopBackOff`.
+> Le risque annoncé était réel : nginx résout `api` (dans `proxy_pass http://api:8080/`) au chargement de sa configuration ; un pod `front` redémarré sans DNS sort en erreur (`nginx: [emerg] host not found in upstream "api" in /etc/nginx/conf.d/default.conf:4`, vérifié en supprimant un pod pendant la panne) et redémarre en boucle (`Error`, puis `CrashLoopBackOff`).
 >
 > **Vérification** : la résolution depuis `front` renvoie l'adresse du Service `api`, et `lab/pannes.sh verifier 06` réussit.
 
@@ -786,24 +792,22 @@ Lance `lab/pannes.sh casser 07`. Une modification de `front-v2` a été appliqu�
 > NAME                            READY   STATUS    RESTARTS   AGE
 > pod/front-v2-6d8f7c9b4f-q8m2t   1/1     Running   0          2h
 > Available=True MinimumReplicasAvailable
-> Progressing=True ReplicaSetUpdated
+> Progressing=True NewReplicaSetCreated
 > ReplicaFailure=True FailedCreate
 > ```
 >
 > Le nouveau ReplicaSet veut un pod (`DESIRED 1`) et n'en a aucun (`CURRENT 0`) : le pod n'a jamais été créé, il n'y a donc ni pod en échec ni `FailedScheduling` à chercher. L'ancien pod sert toujours, car avec un seul réplica les valeurs par défaut de la stratégie (25 %) donnent `maxSurge` 1 et `maxUnavailable` 0. La condition `ReplicaFailure` renvoie au ReplicaSet :
 >
 > ```bash
-> kubectl -n boutique describe rs front-v2-7d4b9c8f6 | grep -A3 Events
+> kubectl -n boutique describe rs front-v2-7d4b9c8f6 | tail -2
 > ```
 >
 > ```
-> Events:
->   Type     Reason        Age                 From                   Message
->   ----     ------        ----                ----                   -------
->   Warning  FailedCreate  48s (x14 over 2m)   replicaset-controller  Error creating: pods "front-v2-7d4b9c8f6-x8k2p" is forbidden: maximum cpu usage per Container is 1, but limit is 2
+>   Warning  FailedCreate  3m18s                   replicaset-controller  Error creating: pods "front-v2-7d4b9c8f6-lchgd" is forbidden: maximum cpu usage per Container is 1, but limit is 2
+>   Warning  FailedCreate  2m27s (x16 over 3m17s)  replicaset-controller  (combined from similar events): Error creating: pods "front-v2-7d4b9c8f6-4t8b9" is forbidden: maximum cpu usage per Container is 1, but limit is 2
 > ```
 >
-> La LimitRange `boutique-limites` plafonne chaque conteneur à 1 CPU ; le nouveau gabarit demande 2 CPU en request et en limit. Le quota `boutique-quota` n'est pas en cause : il resterait de la place sous ses 4 CPU de requests et 8 CPU de limits, et de toute façon `LimitRanger` passe avant `ResourceQuota` dans la chaîne d'admission. Le contrôleur de ReplicaSet réessaie avec un délai croissant, d'où le compteur `x14`. `rollout history` confirme ce qui a changé, puis on rétablit les valeurs d'origine :
+> La LimitRange `boutique-limites` plafonne chaque conteneur à 1 CPU ; le nouveau gabarit demande 2 CPU en request et en limit. Le quota `boutique-quota` n'est pas en cause : il resterait de la place sous ses 4 CPU de requests et 8 CPU de limits, et de toute façon `LimitRanger` passe avant `ResourceQuota` dans la chaîne d'admission. Le contrôleur de ReplicaSet réessaie avec un délai croissant. Chaque essai porte un nom de pod différent, donc un message différent : `describe` liste d'abord neuf événements distincts, puis les suivants sont regroupés sous `(combined from similar events):` (21.5.1). Au bout d'une minute environ, le compteur cesse d'augmenter : la bibliothèque client limite chaque émetteur à une rafale de 25 événements par objet, puis à un toutes les cinq minutes, alors que le contrôleur continue de réessayer. `rollout history` confirme ce qui a changé, puis on rétablit les valeurs d'origine :
 >
 > ```bash
 > kubectl -n boutique rollout history deployment/front-v2
@@ -832,10 +836,12 @@ Lance `lab/pannes.sh casser 08`. Après un redémarrage, `redis-0` reste `Pendin
 > redis-0   0/1     Pending   0          40s   <none>   <none>   …
 >
 > LAST SEEN   TYPE      REASON             OBJECT        MESSAGE
+> …
+> 41s         Normal    Killing            Pod/redis-0   Stopping container redis
 > 40s         Warning   FailedScheduling   Pod/redis-0   0/3 nodes are available: 3 node(s) didn't match Pod's node affinity/selector. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.
 > ```
 >
-> Aucun nœud ne satisfait les contraintes de placement. Le pod en a deux : le `nodeSelector` du gabarit et l'affinité du PV de sa PVC.
+> Le nom `redis-0` étant réutilisé d'une incarnation à l'autre, `--for pod/redis-0` ramène aussi les événements de l'ancien pod, jusqu'à son arrêt (`Killing`) ; seule la dernière ligne concerne le pod actuel. Aucun nœud ne satisfait les contraintes de placement. Le pod en a deux : le `nodeSelector` du gabarit et l'affinité du PV de sa PVC.
 >
 > ```bash
 > kubectl -n boutique get sts redis -o jsonpath='{.spec.template.spec.nodeSelector}{"\n"}'
@@ -861,7 +867,7 @@ Lance `lab/pannes.sh casser 08`. Après un redémarrage, `redis-0` reste `Pendin
 >
 > Le scheduler retente le pod dès que le nœud change ; aucune action sur le pod n'est nécessaire.
 >
-> **Vérification** : `kubectl -n boutique exec redis-0 -- redis-cli GET fil-rouge` affiche `persistant`, et `lab/pannes.sh verifier 08` réussit.
+> **Vérification** : `kubectl -n boutique exec redis-0 -- redis-cli GET commandes` affiche `42` (la clé écrite au chapitre 15), et `lab/pannes.sh verifier 08` réussit.
 
 #### Exercice 22.9 — Panne 09 : le Service api n'a plus de backend
 
@@ -909,13 +915,13 @@ Lance `lab/pannes.sh casser 09`. Les pods `api` tournent, mais le Service `api` 
 >
 > Le gabarit redevient identique à celui de l'ancien ReplicaSet : le contrôleur le réutilise (même hachage `pod-template-hash`) et le remonte à 2, puis réduit le ReplicaSet fautif. `rollout undo` aboutirait au même résultat.
 >
-> **Vérification** : les deux adresses de l'EndpointSlice affichent `ready=true`, `curl -sk --resolve api.boutique.example:443:$IP https://api.boutique.example/hostname` répond un nom de pod, et `lab/pannes.sh verifier 09` réussit.
+> **Vérification** : les deux adresses de l'EndpointSlice affichent `ready=true`, `curl -sk --resolve api.boutique.example:443:$IP https://api.boutique.example/hostname` répond un nom de pod, et `lab/pannes.sh verifier 09` réussit. Juste après la fin du rollout, l'EndpointSlice peut encore lister l'adresse d'un pod fautif en cours d'arrêt (`ready=false`) et ingress-nginx répondre `503` une ou deux secondes, le temps de recharger ses backends : relance le `curl`.
 
 #### Exercice 22.10 — Panne 10 : redis-0 redémarre en boucle
 
 **Point de départ** : exercice 22.9, ou instantané I4.
 
-Lance `lab/pannes.sh casser 10`. `redis-0` redémarre en boucle depuis une modification du StatefulSet. Rétablis `redis` avec ses ressources mémoire d'origine (request 64Mi, limit 256Mi) et vérifie que la donnée `fil-rouge` est intacte.
+Lance `lab/pannes.sh casser 10`. `redis-0` redémarre en boucle depuis une modification du StatefulSet. Rétablis `redis` avec ses ressources mémoire d'origine (request 64Mi, limit 256Mi) et vérifie que la clé `commandes` écrite au chapitre 15 est intacte.
 
 > [!example]- Solution
 > ```bash
@@ -932,26 +938,27 @@ Lance `lab/pannes.sh casser 10`. `redis-0` redémarre en boucle depuis une modif
 >       Exit Code:    137
 >       Started:      Fri, 23 Oct 2026 21:41:12 +0200
 >       Finished:     Fri, 23 Oct 2026 21:41:12 +0200
+> {"limits":{"cpu":"200m","memory":"5Mi"},"requests":{"cpu":"50m","memory":"4Mi"}}
 > ```
 >
-> `OOMKilled` et 137 : le noyau a tué redis parce qu'il dépassait la limite mémoire de son cgroup, et le gabarit montre une limite de `8Mi`, bien trop basse pour charger le serveur et ses données. On rétablit les deux valeurs d'un coup (une request supérieure à la limit serait refusée par la validation) :
+> `OOMKilled` et 137 : le noyau a tué redis parce qu'il dépassait la limite mémoire de son cgroup, et le gabarit montre une limite de `5Mi` (request `4Mi`), bien trop basse pour charger le serveur et ses données. Selon l'instant, la colonne STATUS affiche `CrashLoopBackOff` ou `Error` : le kubelet n'inscrit l'attente qu'en resynchronisant le pod (22.2.4). Si `Reason` vaut `Error` avec le même code 137, c'est la limite inotify de ton poste qui a empêché containerd d'observer l'OOM (22.2.6) ; `minikube -p cka ssh -n cka-m03 -- 'sudo dmesg | grep -i "out of memory" | tail -1'` le confirme (`Memory cgroup out of memory: Killed process … (redis-server)`). On rétablit les deux valeurs d'un coup (une request supérieure à la limit serait refusée par la validation) :
 >
 > ```bash
 > kubectl -n boutique set resources statefulset redis --requests=memory=64Mi --limits=memory=256Mi
 > kubectl -n boutique rollout status statefulset/redis --timeout=60s
 > ```
 >
-> `rollout status` ne se termine pas : avec la politique `OrderedReady`, le contrôleur attend que `redis-0`, cassé, devienne prêt avant d'appliquer le nouveau gabarit, ce qui n'arrivera jamais (« Forced rollback », 22.4.1). Le pod garde l'ancien gabarit, comme le montre son label `controller-revision-hash`, différent de `.status.updateRevision`. On le supprime pour qu'il soit recréé avec le bon :
+> `rollout status` ne se termine pas (`Waiting for 1 pods to be ready...`, puis `error: timed out waiting for the condition`) : avec la politique `OrderedReady`, le contrôleur attend que `redis-0`, cassé, devienne prêt avant d'appliquer le nouveau gabarit, ce qui n'arrivera jamais (« Forced rollback », 22.4.1). Le pod garde l'ancien gabarit, comme le montre son label `controller-revision-hash`, différent de `.status.updateRevision`. On le supprime pour qu'il soit recréé avec le bon :
 >
 > ```bash
 > kubectl -n boutique delete pod redis-0
 > kubectl -n boutique rollout status statefulset/redis --timeout=120s
-> kubectl -n boutique exec redis-0 -- redis-cli GET fil-rouge
+> kubectl -n boutique exec redis-0 -- redis-cli GET commandes
 > ```
 >
-> La PVC `data-redis-0` n'est pas touchée par la suppression du pod : la donnée écrite avec `--appendonly yes` est rechargée.
+> Le second `rollout status` se termine par `partitioned roll out complete: 1 new pods have been updated...`. La PVC `data-redis-0` n'est pas touchée par la suppression du pod : la donnée écrite avec `--appendonly yes` est rechargée.
 >
-> **Vérification** : `redis-cli GET fil-rouge` affiche `persistant`, et `lab/pannes.sh verifier 10` réussit.
+> **Vérification** : `redis-cli GET commandes` affiche `42`, et `lab/pannes.sh verifier 10` réussit.
 
 #### Exercice 22.11 — Un conteneur éphémère dans api
 
@@ -966,6 +973,7 @@ Sans `kubectl exec`, ajoute à un pod `api` un conteneur éphémère nommé `son
 > ```
 >
 > ```
+> Targeting container "agnhost". If you don't see processes from this container it may be because the container runtime doesn't support this feature.
 > Error from server (Forbidden): pods "api-6c8b7d9f4b-2kq9z" is forbidden: violates PodSecurity "baseline:latest": non-default capabilities (container "sonde" must not include "SYS_PTRACE" in securityContext.capabilities.add)
 > ```
 >

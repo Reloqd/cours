@@ -48,7 +48,7 @@ Les valeurs ci-dessous viennent de la FAQ et des pages d'instructions de la Linu
 | Seconde tentative | une (« One Retake ») |
 | Simulateur | 2 sessions killer.sh de 36 heures chacune, absentes des inscriptions `CKA-SINGLE` |
 
-Deux détails de calendrier comptent. Une réservation exige 24 heures d'avance (les machines virtuelles de l'examen sont préparées pour toi), et on peut la modifier ou l'annuler jusqu'à 24 heures avant l'heure prévue, pas après. Le jour venu, tu peux lancer la procédure d'accueil jusqu'à 30 minutes avant l'heure réservée, et tu dois avoir commencé au plus tard 30 minutes après : au-delà, tu es déclaré absent, sans remboursement ni seconde tentative. Le chapitre 24 détaille le déroulé complet de la journée.
+Deux détails de calendrier comptent. Une réservation exige 24 heures d'avance (les machines virtuelles de l'examen sont préparées pour toi), et on peut la modifier ou l'annuler jusqu'à 24 heures avant l'heure prévue, pas après. Le jour venu, tu peux lancer la procédure d'accueil jusqu'à 30 minutes avant l'heure réservée, et tu dois avoir commencé au plus tard 30 minutes après : au-delà, tu es déclaré absent, sans remboursement ni seconde tentative. Le chapitre 24.9 détaille le déroulé complet de la journée.
 
 #### Comment la note est calculée
 
@@ -92,7 +92,7 @@ L'environnement d'examen :
   le ssh imbriqué n'est pas pris en charge.
 ```
 
-Trois règles en découlent dès maintenant, et le chapitre 24 y revient en détail. Tu tapes la commande `ssh` de l'encadré au début de **chaque** tâche, même si tu crois être déjà sur le bon hôte. Tu reviens sur `base` par `exit` à la fin de chaque tâche (deux fois si tu étais passé root par `sudo -i`). Et tu ne redémarres jamais `base` : cela ne relance pas ton environnement d'examen.
+Trois règles en découlent dès maintenant, et le chapitre 24.2 y revient en détail. Tu tapes la commande `ssh` de l'encadré au début de **chaque** tâche, même si tu crois être déjà sur le bon hôte. Tu reviens sur `base` par `exit` à la fin de chaque tâche (deux fois si tu étais passé root par `sudo -i`). Et tu ne redémarres jamais `base` : cela ne relance pas ton environnement d'examen.
 
 #### Les ressources autorisées
 
@@ -204,7 +204,7 @@ Quelques changements antérieurs à la 1.35 restent mal connus et reviennent sou
 | Mode `ipvs` de kube-proxy déprécié | avertissement au démarrage ; désactivé par défaut prévu en 1.40, supprimé en 1.43 | 10, 19 |
 | Dernière version à prendre en charge containerd 1.x | à partir de 1.36, containerd 2.x | 18, 19 |
 | `trafficDistribution: PreferSameNode` GA | `PreferClose` devient un alias déprécié de `PreferSameZone` | 10 |
-| kubectl ne gère plus les anciennes API bêta (`networking/v1beta1` Ingress, `policy/v1beta1` PDB…) | les manifestes anciens doivent passer en `v1` | 3 |
+| kubectl ne gère plus les anciennes API bêta (`networking/v1beta1` Ingress, `policy/v1beta1` PDB…) | les manifestes anciens doivent passer en `v1` | 2 |
 | `pods/exec`, `pods/attach`, `pods/portforward` exigent le verbe `create`, y compris en WebSocket | un Role qui ne donne que `get` sur `pods/exec` ne suffit plus | 16 |
 
 #### Kubernetes 1.36
@@ -236,7 +236,7 @@ Quelques changements antérieurs à la 1.35 restent mal connus et reviennent sou
 
 #### L'écosystème
 
-Quatre changements extérieurs au code de Kubernetes pèsent aussi sur l'examen. Le projet **ingress-nginx** a été retiré le 24 mars 2026 : son dépôt est archivé, plus aucun correctif ne paraît (dernier contrôleur : v1.15.1). L'API Ingress, elle, reste GA et au programme, et l'addon `ingress` de minikube v1.39.0 utilise toujours ce contrôleur : le chapitre 12 explique ce que cela change. **Gateway API** v1.6 (dernière version stable au 23 octobre 2026 : v1.6.3) fait passer TCPRoute et UDPRoute dans le canal standard ; le chapitre 13 l'utilise avec Envoy Gateway v1.9.2. **Helm 4**, sorti le 17 novembre 2025, renomme `--atomic` en `--rollback-on-failure` et `--force` en `--force-replace`, et applique les manifestes côté serveur (*server-side apply*) par défaut aux nouvelles installations ; Helm 3 ne reçoit plus que des correctifs de sécurité, jusqu'au 11 novembre 2026 (chapitre 17). Enfin, **containerd 1.7** est en fin de vie depuis le 30 septembre 2026 ; Kubernetes 1.37 est validé avec containerd 2.4 et 2.3 (chapitre 19).
+Quatre changements extérieurs au code de Kubernetes pèsent aussi sur l'examen. Le projet **ingress-nginx** a été retiré le 24 mars 2026 : son dépôt est archivé, plus aucun correctif ne paraît (dernier contrôleur : v1.15.1). L'API Ingress, elle, reste GA et au programme, et l'addon `ingress` de minikube v1.39.0 utilise toujours ce contrôleur : le chapitre 12.3 explique ce que cela change. **Gateway API** v1.6 (dernière version stable au 23 octobre 2026 : v1.6.3) fait passer TCPRoute et UDPRoute dans le canal standard ; le chapitre 13 l'utilise avec Envoy Gateway v1.9.2. **Helm 4**, sorti le 17 novembre 2025, renomme `--atomic` en `--rollback-on-failure` et `--force` en `--force-replace`, et applique les manifestes côté serveur (*server-side apply*) par défaut aux nouvelles installations ; Helm 3 ne reçoit plus que des correctifs de sécurité, jusqu'au 11 novembre 2026 (chapitre 17.7). Enfin, **containerd 1.7** est en fin de vie depuis le 30 septembre 2026 ; Kubernetes 1.37 est validé avec containerd 2.4 et 2.3 (chapitre 19.2.5).
 
 > [!warning] Les habitudes périmées
 > Méfie-toi de tout guide qui te fait taper l'une de ces commandes, encore très répandues :
@@ -244,7 +244,7 @@ Quatre changements extérieurs au code de Kubernetes pèsent aussi sur l'examen.
 > - `ETCDCTL_API=3 etcdctl …` : la variable est inutile depuis etcd 3.6, et etcdctl 3.7 affiche un avertissement `unrecognized environment variable` (la commande réussit quand même) ;
 > - `etcdctl snapshot restore` : supprimée, c'est `etcdutl snapshot restore` ;
 > - `kubectl exec mon-pod ls` : refusée depuis 1.35, c'est `kubectl exec mon-pod -- ls` ;
-> - `kubectl set image … --record` : l'option est dépréciée et masquée de l'aide (elle est acceptée avec l'avertissement `Flag --record has been deprecated`) ; on documente une révision par l'annotation `kubernetes.io/change-cause` (chapitre 5) ;
+> - `kubectl set image … --record` : l'option est dépréciée et masquée de l'aide (elle est acceptée avec l'avertissement `Flag --record has been deprecated`) ; on documente une révision par l'annotation `kubernetes.io/change-cause` (chapitre 5.5) ;
 > - `helm install --atomic` : renommée `--rollback-on-failure` dans Helm 4.
 
 ### 1.5 Pourquoi minikube d'abord, et ses limites
@@ -284,7 +284,7 @@ docker version --format '{{.Server.Version}}'
 
 C'est la contrainte la plus sournoise du lab, et elle se règle **avant** le premier démarrage. inotify est le mécanisme du noyau par lequel un processus surveille des fichiers. systemd, le kubelet, containerd, kube-proxy, Calico en ouvrent chacun plusieurs instances. Or les nœuds minikube sont des conteneurs qui tournent en root, sans espace de noms utilisateur séparé (le pilote Docker de minikube ne prend pas en charge `userns-remap`) : toutes leurs instances inotify comptent dans la limite **de l'utilisateur root de l'hôte**, `fs.inotify.max_user_instances`, dont la valeur par défaut du noyau est 128.
 
-Un cluster nu de trois nœuds en consomme déjà une centaine (101 relevées : 45 sur `cka`, 25 et 31 sur les workers), un cluster chargé des addons du cours 115, sans compter les processus root de l'hôte lui-même. La limite tombe vite, et les symptômes ne la désignent jamais clairement : un nœud ajouté qui ne démarre pas (`Failed to allocate manager object: Too many open files` dans le journal du conteneur), un kube-proxy en erreur (`fsnotify watcher init: too many open files`), un `calico-node` bloqué en `Init`, un nœud qui reste `NotReady` avec `cni plugin not initialized`, un `systemctl` qui affiche `Failed to allocate directory watch: Too many open files`. On relève donc la limite une fois pour toutes, avec les valeurs que recommande aussi le projet kind :
+Un cluster nu de trois nœuds en consomme déjà une centaine (101 relevées : 45 sur `cka`, 25 et 31 sur les workers), un cluster chargé des addons du cours, 115, sans compter les processus root de l'hôte lui-même. La limite tombe vite, et les symptômes ne la désignent jamais clairement : un nœud ajouté qui ne démarre pas (`Failed to allocate manager object: Too many open files` dans le journal du conteneur), un kube-proxy en erreur (`fsnotify watcher init: too many open files`), un `calico-node` bloqué en `Init`, un nœud qui reste `NotReady` avec `cni plugin not initialized`, un `systemctl` qui affiche `Failed to allocate directory watch: Too many open files`. On relève donc la limite une fois pour toutes, avec les valeurs que recommande aussi le projet kind :
 
 ```bash
 sudo sysctl fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288
@@ -452,7 +452,7 @@ Le lab se gère avec quatre commandes, chacune avec ses particularités :
 
 | Commande | Effet | À savoir |
 |---|---|---|
-| `minikube -p cka stop` | arrête les trois conteneurs (environ 1 min 30) | objets, addons et volumes sont conservés |
+| `minikube -p cka stop` | arrête les trois conteneurs (1 min 20 s à 1 min 26 s mesurées) | objets, addons et volumes sont conservés |
 | `minikube -p cka start` | relance le cluster arrêté (environ 30 s, nœuds prêts peu après) | les manifestes statiques ne sont pas réécrits ; metrics-server et les pilotes CSI mettent environ une minute à revenir |
 | `minikube -p cka delete` | supprime conteneurs et volumes | laisse le réseau Docker `cka` : relance la commande une seconde fois pour faire place nette |
 | `lab/restaurer.sh I2` | supprime et recrée le profil, puis rejoue les états du cours jusqu'à l'instantané demandé | 7 min 23 s mesurées pour I2 (de 1 à 15 minutes selon l'instantané) ; voir la section 1.9 |
@@ -495,7 +495,7 @@ Plan d'adressage du lab :
 
 Les adresses des nœuds sont celles qu'attribue minikube quand le sous-réseau 192.168.49.0/24 est libre. Si un autre profil minikube ou un autre réseau Docker l'occupe déjà, minikube en choisit un autre : la commande `minikube -p cka ip` (adresse du control plane) fait toujours foi, et les exercices l'utilisent plutôt que d'écrire l'adresse en dur.
 
-Les adresses des pods appellent une remarque, que le chapitre 9 développe. Le controller-manager attribue bien à chaque nœud un `spec.podCIDR` en /24 (10.244.0.0/24 pour `cka`, 10.244.1.0/24 pour `cka-m02`…), mais l'IPAM de Calico l'ignore et distribue ses propres blocs /26 : les pods de `cka` reçoivent par exemple des adresses en 10.244.142.64/26. Ne déduis jamais le nœud d'un pod de son adresse.
+Les adresses des pods appellent une remarque, que le chapitre 9.4 développe. Le controller-manager attribue bien à chaque nœud un `spec.podCIDR` en /24 (10.244.0.0/24 pour `cka`, 10.244.1.0/24 pour `cka-m02`…), mais l'IPAM de Calico l'ignore et distribue ses propres blocs /26 : les pods de `cka` reçoivent par exemple des adresses en 10.244.142.64/26. Ne déduis jamais le nœud d'un pod de son adresse.
 
 À l'intérieur des nœuds, les chemins utiles sont les suivants ; ceux qui diffèrent d'un cluster kubeadm sont marqués d'un astérisque :
 
@@ -503,7 +503,7 @@ Les adresses des pods appellent une remarque, que le chapitre 9 développe. Le c
 |---|---|---|
 | Manifestes des pods statiques | `/etc/kubernetes/manifests` | identique |
 | Certificats | `/var/lib/minikube/certs` (etcd : `…/certs/etcd`) * | `/etc/kubernetes/pki` |
-| Données etcd | `/var/lib/minikube/etcd` * | `/var/lib/etcd` |
+| Données etcd | `/var/lib/minikube/etcd` *, puis `/var/lib/minikube/etcd-restore` après l'exercice 20.5 (`lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`) | `/var/lib/etcd` |
 | Configuration du kubelet | `/var/lib/kubelet/config.yaml` | identique |
 | Kubeconfigs des composants | `/etc/kubernetes/{admin,controller-manager,scheduler,kubelet}.conf` | identique |
 | Binaires kubeadm, kubelet, kubectl | `/var/lib/minikube/binaries/v1.37.0/`, hors du `PATH` * | `/usr/bin` |
@@ -519,8 +519,8 @@ Voici l'inventaire complet des différences entre le lab et un cluster kubeadm c
 |---|---|---|---|
 | Port de l'API | 6443 | **8443** | 2, 3, 23 |
 | Certificats | `/etc/kubernetes/pki` | `/var/lib/minikube/certs` ; `/etc/kubernetes/pki` absent du control plane | 16, 19, 20, 23 |
-| Données etcd | `/var/lib/etcd` | `/var/lib/minikube/etcd` | 20 |
-| etcdctl, etcdutl | présents sur le nœud de control plane | absents des nœuds (installés au chapitre 20) ; présents dans l'image etcd, qui n'a pas de shell | 20 |
+| Données etcd | `/var/lib/etcd` | `/var/lib/minikube/etcd`, puis `/var/lib/minikube/etcd-restore` après l'exercice 20.5 (`lab/restaurer.sh I4` repart de `/var/lib/minikube/etcd`) | 20, 23 |
+| etcdctl, etcdutl | présents sur le nœud de control plane | absents des nœuds (installés au chapitre 20.3.3) ; présents dans l'image etcd, qui n'a pas de shell | 20 |
 | kubeadm, kubelet, kubectl | dans le `PATH` | `/var/lib/minikube/binaries/v1.37.0/`, hors du `PATH` ; pas de kubectl utilisable dans les nœuds | 19, 23 |
 | `kubeadm certs check-expiration` | sans option | exige `--config /var/tmp/minikube/kubeadm.yaml` ou `--cert-dir /var/lib/minikube/certs` | 19 |
 | Certificat de l'API server | 1 an | 3 ans (émis par minikube) ; les autres 1 an, les CA 10 ans | 19 |
@@ -593,7 +593,7 @@ Chaque chapitre indique, au début de ses exercices, l'état dont il part, et à
 
 #### Les instantanés
 
-Cinq instantanés jalonnent le parcours. Sous minikube, un instantané n'est pas une image de machine : c'est un **état reconstruit par script**. `lab/restaurer.sh I2` supprime le profil `cka`, le recrée, puis rejoue l'état laissé par chaque chapitre jusqu'à l'instantané demandé. Cela prend cinq à dix minutes, et cela te permet de reprendre le cours à n'importe quel jalon, ou de repartir d'un état propre après une expérience qui a mal tourné.
+Cinq instantanés jalonnent le parcours. Sous minikube, un instantané n'est pas une image de machine : c'est un **état reconstruit par script**. `lab/restaurer.sh I2` supprime le profil `cka`, le recrée, puis rejoue l'état laissé par chaque chapitre jusqu'à l'instantané demandé. Cela prend de 1 à 15 minutes selon l'instantané (7 min 23 s mesurées pour I2, 14 min 23 s pour I4), et cela te permet de reprendre le cours à n'importe quel jalon, ou de repartir d'un état propre après une expérience qui a mal tourné.
 
 ```
 Fil rouge et instantanés :
@@ -669,7 +669,7 @@ Le cours se suit dans l'ordre : chaque partie s'appuie sur l'état laissé par l
 | 9 | 21, 22, 23 | pannes 01 à 19, chacune au moins deux fois | semaine 5 |
 | 10 | 24, annexe B, killer.sh | examen blanc chronométré, killer.sh A puis B | semaine 6 |
 
-Trois habitudes rendent ce plan efficace. Refais chaque exercice une seconde fois quelques jours plus tard, sans regarder la solution et en chronométrant : la vitesse vient de la répétition, pas de la lecture. Tiens une liste des commandes que tu as dû chercher, et relis-la chaque semaine. Et ne passe la session killer.sh qu'une fois le cours terminé (chapitre 24) : ses deux sessions sont précieuses, elles servent à mesurer, pas à apprendre.
+Trois habitudes rendent ce plan efficace. Refais chaque exercice une seconde fois quelques jours plus tard, sans regarder la solution et en chronométrant : la vitesse vient de la répétition, pas de la lecture. Tiens une liste des commandes que tu as dû chercher, et relis-la chaque semaine. Et ne passe la session killer.sh qu'une fois le cours terminé (chapitre 24.8) : ses deux sessions sont précieuses, elles servent à mesurer, pas à apprendre.
 
 ### 1.11 Pièges courants
 
@@ -836,7 +836,7 @@ Depuis ton poste, sans entrer dans les nœuds, relève pour chacun des trois nœ
 > docker network inspect cka --format '{{json .IPAM.Config}}'
 > ```
 >
-> `-o wide` donne l'adresse interne (192.168.49.2, .3 et .4) et le rôle : seul `cka` porte le label `node-role.kubernetes.io/control-plane`, d'où `ROLES control-plane` ; les workers affichent `<none>`, comme sur un cluster kubeadm où personne ne leur a ajouté de label de rôle. La colonne `TAINTS` vaut `<none>` pour les trois nœuds : sous minikube, même le control plane n'a pas de taint (encadré de la section 1.8). La sélection par champ `spec.nodeName` montre que `cka` porte les pods statiques et, le plus souvent, CoreDNS et `calico-kube-controllers`, créés avant l'arrivée des workers ; chaque worker porte au moins un `calico-node` et un `kube-proxy`, les pods des deux DaemonSets. `storage-provisioner`, un pod nu que rien n'épingle, peut se trouver sur n'importe quel nœud.
+> `-o wide` donne l'adresse interne (192.168.49.2, .3 et .4) et le rôle : seul `cka` porte le label `node-role.kubernetes.io/control-plane`, d'où `ROLES control-plane` ; les workers affichent `<none>`, comme sur un cluster kubeadm où personne ne leur a ajouté de label de rôle. La colonne `TAINTS` vaut `<none>` pour les trois nœuds : sous minikube, même le control plane n'a pas de taint (tableau de la section 1.8). La sélection par champ `spec.nodeName` montre que `cka` porte les pods statiques et, le plus souvent, CoreDNS et `calico-kube-controllers`, créés avant l'arrivée des workers ; chaque worker porte au moins un `calico-node` et un `kube-proxy`, les pods des deux DaemonSets. `storage-provisioner`, un pod nu que rien n'épingle, peut se trouver sur n'importe quel nœud.
 >
 > La capacité affichée est celle de ton hôte (par exemple `8` CPU et `32019572Ki` sur un poste de 32 Gio), identique sur les trois nœuds. Le kubelet lit les ressources de la machine sur laquelle il tourne, c'est-à-dire, pour un conteneur, celles du noyau de l'hôte ; la limite mémoire posée par Docker sur le conteneur n'y change rien, et la limite CPU n'est même pas appliquée sous cgroup v2.
 >
@@ -863,7 +863,7 @@ Entre dans le nœud `cka-m02` et vérifie : l'utilisateur sous lequel tu es conn
 > minikube -p cka ssh -- sudo ls -l /etc/kubernetes/manifests
 > ```
 >
-> On est connecté en `docker`, avec un `sudo` sans mot de passe : c'est l'équivalent, sur le lab, du `ssh <nœud>` puis `sudo -i` de l'examen. `crictl` sans `sudo` échoue sur `/run/containerd/containerd.sock: connect: permission denied`, car le socket appartient à root. Sur `cka-m02`, `/etc/kubernetes/manifests` existe mais est vide : un worker n'a pas de pod statique, et son kubelet surveille quand même ce dossier (chapitre 2). Sur `cka`, il contient les quatre manifestes du control plane.
+> On est connecté en `docker`, avec un `sudo` sans mot de passe : c'est l'équivalent, sur le lab, du `ssh <nœud>` puis `sudo -i` de l'examen. `crictl` sans `sudo` échoue sur `/run/containerd/containerd.sock: connect: permission denied`, car le socket appartient à root. Sur `cka-m02`, `/etc/kubernetes/manifests` existe mais est vide : un worker n'a pas de pod statique, et son kubelet surveille quand même ce dossier (chapitre 2.6). Sur `cka`, il contient les quatre manifestes du control plane.
 >
 > Sur `cka`, `systemctl is-enabled kubelet` répondrait `disabled` : minikube démarre lui-même le kubelet du control plane. C'est un écart avec un cluster kubeadm, où le kubelet est activé partout (section 1.8).
 >
@@ -888,7 +888,7 @@ Entre dans le nœud `cka-m02` et vérifie : l'utilisateur sous lequel tu es conn
 > cat ~/cka/versions.txt
 > ```
 >
-> `kubectl version` interroge le client et le serveur ; le serveur est en v1.37.0 (dernière version prise en charge par minikube v1.39.0), le client en v1.37.1, à une version de correctif près, ce qui est sans conséquence. Les versions du kubelet et du runtime viennent de `status.nodeInfo`, que chaque kubelet publie dans son objet Node. Les images donnent la version de chaque composant conteneurisé. Pour etcd, on interroge le binaire dans son conteneur : l'image est *distroless*, sans shell, mais `kubectl exec` peut y lancer directement un exécutable présent, ici `etcd`, et l'image contient aussi `etcdctl` et `etcdutl` (chapitre 20).
+> `kubectl version` interroge le client et le serveur ; le serveur est en v1.37.0 (dernière version prise en charge par minikube v1.39.0), le client en v1.37.1, à une version de correctif près, ce qui est sans conséquence. Les versions du kubelet et du runtime viennent de `status.nodeInfo`, que chaque kubelet publie dans son objet Node. Les images donnent la version de chaque composant conteneurisé. Pour etcd, on interroge le binaire dans son conteneur : l'image est *distroless*, sans shell, mais `kubectl exec` peut y lancer directement un exécutable présent, ici `etcd`, et l'image contient aussi `etcdctl` et `etcdutl` (chapitre 20.1.3).
 >
 > **Vérification** : le fichier contient, entre autres, ces valeurs :
 >
