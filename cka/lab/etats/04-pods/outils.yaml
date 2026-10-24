@@ -1,0 +1,23 @@
+# Boîte à outils permanente du fil rouge. Ressources d'origine : le
+# redimensionnement en place (requests cpu 100m, limits cpu 300m) est fait
+# par appliquer.sh, comme dans l'exercice.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: outils
+  namespace: boutique
+  labels:
+    app: outils
+    tier: outils
+spec:
+  containers:
+  - name: outils
+    image: nicolaka/netshoot:v0.16
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi

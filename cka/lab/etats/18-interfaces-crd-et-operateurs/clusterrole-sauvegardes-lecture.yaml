@@ -1,0 +1,11 @@
+# Agrégée au ClusterRole view par son label.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sauvegardes-lecture
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+- apiGroups: ["boutique.example"]
+  resources: ["sauvegardes"]
+  verbs: ["get", "list", "watch"]

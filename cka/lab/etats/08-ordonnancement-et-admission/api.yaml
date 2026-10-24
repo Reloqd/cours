@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: boutique
+  labels:
+    app: api
+    tier: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+        tier: api
+    spec:
+      priorityClassName: boutique-critique
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: api
+      containers:
+      - name: agnhost
+        image: registry.k8s.io/e2e-test-images/agnhost:2.66.1
+        args: ["netexec", "--http-port=8080"]
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /hostname
+            port: http
+        envFrom:
+        - configMapRef:
+            name: api-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: api-secret
+              key: DB_PASSWORD
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 500m
+            memory: 128Mi

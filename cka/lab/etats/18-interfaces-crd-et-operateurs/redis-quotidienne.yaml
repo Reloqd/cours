@@ -1,0 +1,9 @@
+apiVersion: boutique.example/v1
+kind: Sauvegarde
+metadata:
+  name: redis-quotidienne
+  namespace: boutique
+spec:
+  cible: redis
+  planification: "0 2 * * *"
+  retention: 7

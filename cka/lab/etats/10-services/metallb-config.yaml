@@ -1,0 +1,15 @@
+# Plage de l'addon MetalLB v0.9.6 (configuration par ConfigMap, sans CRD).
+# @RESEAU@ est remplacé par les trois premiers octets du réseau du cluster
+# (192.168.49 si le réseau Docker était libre).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace: metallb-system
+data:
+  config: |
+    address-pools:
+    - name: default
+      protocol: layer2
+      addresses:
+      - @RESEAU@.100-@RESEAU@.120

@@ -1,0 +1,11 @@
+# @REQUEST@ : CSR PKCS#10 de alice encodée en base64 (sur une ligne).
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: alice
+spec:
+  request: @REQUEST@
+  signerName: kubernetes.io/kube-apiserver-client
+  expirationSeconds: 604800
+  usages:
+  - client auth

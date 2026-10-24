@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: agent-noeud
+  namespace: boutique
+  labels:
+    app: agent-noeud
+    tier: outils
+spec:
+  selector:
+    matchLabels:
+      app: agent-noeud
+  template:
+    metadata:
+      labels:
+        app: agent-noeud
+        tier: outils
+    spec:
+      containers:
+      - name: agent
+        image: busybox:1.37.0
+        command: ["sh", "-c", "while true; do echo \"$(date) $NODE_NAME\"; sleep 60; done"]
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi

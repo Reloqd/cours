@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: boutique
+  labels:
+    app: redis
+    tier: donnees
+spec:
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    protocol: TCP
+    targetPort: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: boutique
+  labels:
+    app: redis
+    tier: donnees
+spec:
+  replicas: 1
+  serviceName: redis
+  selector:
+    matchLabels:
+      app: redis
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: donnees
+    spec:
+      nodeSelector:
+        disque: ssd
+      containers:
+      - name: redis
+        image: redis:8.10.2-alpine
+        args: ["--appendonly", "yes"]
+        ports:
+        - name: redis
+          containerPort: 6379
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: rapide
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi

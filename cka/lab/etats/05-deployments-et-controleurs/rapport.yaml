@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rapport
+  namespace: boutique
+  labels:
+    app: rapport
+    tier: batch
+spec:
+  schedule: "*/5 * * * *"
+  timeZone: Europe/Paris
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app: rapport
+        tier: batch
+    spec:
+      template:
+        metadata:
+          labels:
+            app: rapport
+            tier: batch
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: rapport
+            image: busybox:1.37.0
+            command: ["sh", "-c", "date; echo rapport genere"]

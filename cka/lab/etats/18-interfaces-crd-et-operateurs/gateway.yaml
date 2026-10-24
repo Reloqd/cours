@@ -1,0 +1,28 @@
+# Le listener https sert désormais le certificat émis par cert-manager.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: boutique-gw
+  namespace: boutique
+spec:
+  gatewayClassName: eg
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    hostname: gw.boutique.example
+    allowedRoutes:
+      namespaces:
+        from: Same
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: gw.boutique.example
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: boutique-gw-tls
+    allowedRoutes:
+      namespaces:
+        from: Same

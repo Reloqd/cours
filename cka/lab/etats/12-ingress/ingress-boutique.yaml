@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boutique
+  namespace: boutique
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - boutique.example
+    - api.boutique.example
+    secretName: boutique-tls
+  rules:
+  - host: boutique.example
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: front
+            port:
+              number: 80
+  - host: api.boutique.example
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api
+            port:
+              number: 8080

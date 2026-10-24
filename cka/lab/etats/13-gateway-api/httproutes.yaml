@@ -1,0 +1,76 @@
+# Listener http : redirection vers HTTPS. Listener https : les deux routes.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redirection-https
+  namespace: boutique
+spec:
+  parentRefs:
+  - name: boutique-gw
+    sectionName: http
+  hostnames:
+  - gw.boutique.example
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: front
+  namespace: boutique
+spec:
+  parentRefs:
+  - name: boutique-gw
+    sectionName: https
+  hostnames:
+  - gw.boutique.example
+  rules:
+  # À chemin égal, la règle qui teste un en-tête l'emporte.
+  - matches:
+    - headers:
+      - name: X-Version
+        value: v2
+    backendRefs:
+    - name: front-v2
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: front
+      port: 80
+      weight: 90
+    - name: front-v2
+      port: 80
+      weight: 10
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api
+  namespace: boutique
+spec:
+  parentRefs:
+  - name: boutique-gw
+    sectionName: https
+  hostnames:
+  - gw.boutique.example
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    backendRefs:
+    - name: api
+      port: 8080

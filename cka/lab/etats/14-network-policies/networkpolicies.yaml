@@ -1,0 +1,179 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: refus-par-defaut
+  namespace: boutique
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: autorise-dns
+  namespace: boutique
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-entree
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      tier: web
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 80
+    from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: envoy-gateway-system
+    - podSelector:
+        matchLabels:
+          app: outils
+  # NodePort et LoadBalancer. Pod sur le nœud d'entrée : Calico filtre avant
+  # le SNAT et voit le client (réseau des nœuds). Pod sur un autre nœud : il
+  # voit l'adresse du tunnel IPIP du nœud d'entrée (SNAT de kube-proxy).
+  # Tunnels : annotation projectcalico.org/IPv4IPIPTunnelAddr de chaque nœud
+  # (d'ordinaire 10.244.142.64, 10.244.195.192, 10.244.34.128).
+  - ports:
+    - protocol: TCP
+      port: 80
+    from:
+    - ipBlock:
+        cidr: @RESEAU@.0/24
+    - ipBlock:
+        cidr: @TUNNEL_CP@/32
+    - ipBlock:
+        cidr: @TUNNEL_M02@/32
+    - ipBlock:
+        cidr: @TUNNEL_M03@/32
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-sortie
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      tier: web
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-entree
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: web
+    - podSelector:
+        matchLabels:
+          app: outils
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: envoy-gateway-system
+    ports:
+    - protocol: TCP
+      port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-sortie
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-entree
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: outils-sortie
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: outils
+  policyTypes:
+  - Egress
+  egress:
+  - {}

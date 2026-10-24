@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: autosigne
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: boutique-gw
+  namespace: boutique
+spec:
+  secretName: boutique-gw-tls
+  commonName: gw.boutique.example
+  dnsNames:
+  - gw.boutique.example
+  issuerRef:
+    name: autosigne
+    kind: ClusterIssuer
+    group: cert-manager.io
